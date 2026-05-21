@@ -1,0 +1,22 @@
+{
+  "name": "@confidential-perps/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript SDK for the Confidential Perps program",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "prettier 'src/**/*.ts' --check",
+    "lint:fix": "prettier 'src/**/*.ts' -w"
+  },
+  "dependencies": {
+    "@arcium-hq/client": "0.10.3",
+    "@anchor-lang/core": "^1.0.2",
+    "@solana/web3.js": "^1.95.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "prettier": "^2.6.2"
+  }
+}

@@ -1,0 +1,41 @@
+.anchor
+.DS_Store
+target
+**/*.rs.bk
+node_modules
+test-ledger
+.yarn
+.surfpool
+encrypted-ixs/arcis_temp_target
+build
+encrypted-ixs/src/main.rs
+artifacts/
+
+# Secrets (NEVER commit)
+.env
+.env.local
+.env.*.local
+*.pem
+**/secrets/*
+*-keypair.json
+!Anchor.toml
+!**/programs/**/keypair.json
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# Cache
+.cache/
+tmp/
+.next/
+.turbo/
+dist/
+

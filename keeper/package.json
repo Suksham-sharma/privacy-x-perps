@@ -1,0 +1,23 @@
+{
+  "name": "@confidential-perps/keeper",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Liquidation keeper bot — scans positions, triggers reveal+liquidate when underwater",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "prettier 'src/**/*.ts' --check",
+    "lint:fix": "prettier 'src/**/*.ts' -w"
+  },
+  "dependencies": {
+    "@confidential-perps/sdk": "workspace:*",
+    "@arcium-hq/client": "0.10.3",
+    "@solana/web3.js": "^1.95.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "ts-node": "^10.9.0",
+    "prettier": "^2.6.2"
+  }
+}
