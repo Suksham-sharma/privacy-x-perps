@@ -38,4 +38,24 @@ pub mod confidential_perps {
     ) -> Result<()> {
         add_together::add_together_callback_handler(ctx, output)
     }
+
+    // -- SOL-PERP matching --
+
+    pub fn init_market(ctx: Context<InitMarket>) -> Result<()> {
+        init_market::init_market_handler(ctx)
+    }
+
+    pub fn submit_order(
+        ctx: Context<SubmitOrder>,
+        x25519_pubkey: [u8; 32],
+        nonce: u128,
+        ct_side: [u8; 32],
+        ct_price: [u8; 32],
+        ct_size: [u8; 32],
+        ct_client_nonce: [u8; 32],
+    ) -> Result<()> {
+        submit_order::submit_order_handler(
+            ctx, x25519_pubkey, nonce, ct_side, ct_price, ct_size, ct_client_nonce,
+        )
+    }
 }

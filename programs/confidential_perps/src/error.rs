@@ -10,4 +10,18 @@ pub enum ErrorCode {
     CustomError,
     #[msg("The computation was aborted")]
     AbortedComputation,
+
+    // -- domain errors --
+    #[msg("Batch buffer is full")]
+    BatchFull,
+    #[msg("Batch window has closed")]
+    BatchWindowClosed,
+    #[msg("Batch window has not yet closed")]
+    BatchWindowOpen,
+    #[msg("Batch is empty")]
+    BatchEmpty,
+    #[msg("Market is already initialized")]
+    MarketAlreadyInitialized,
+    #[msg("Invalid Pyth feed")]
+    InvalidPythFeed,
 }
