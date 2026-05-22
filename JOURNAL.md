@@ -45,3 +45,17 @@ Final artifacts (clean):
 
 **Net:** entire toolchain wired correctly. Devnet deploy and `arcium test` localnet not yet exercised — Day 2.
 
+---
+
+## Day 2 — 2026-05-24 (same day, continued)
+
+Ran `pnpm install` (had to bump `@arcium-hq/client` 0.10.3 → 0.10.2 in all three package.jsons — the CLI is at 0.10.3 but the npm client lags one patch behind), started OrbStack for Docker, and ran `arcium test`. Full canonical `add_together` e2e passed in 18s: 2 arx-node containers + trusted-dealer spun up, MXE pubkey fetched, comp def initialized, encrypted inputs queued, MPC computed, callback fired, client decrypted result, assertion held. The entire confidential-compute pipeline is verified working before we touch a single line of our own code — Week 4 safety net is dramatically de-risked. Also drafted `docs/circuit-v0.md`: proposed Order/Batch/Fill structs, a uniform-price batch-auction match algorithm sketch in Arcis style, a table of what's encrypted vs public, and 7 open design questions for the human to settle before circuit work begins.
+
+**Surprises:**
+- `@arcium-hq/client@0.10.3` not on npm — only 0.10.2 published. CLI/client version skew.
+
+**Open:**
+- Resolve the 7 questions in `docs/circuit-v0.md` (clearing-price reveal, position-per-user, partial-fill rule, MAX_ORDERS, oracle band, nonce semantics, no-match outcome).
+- Have not yet deployed to devnet (only localnet exercised).
+
+

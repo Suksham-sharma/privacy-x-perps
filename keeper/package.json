@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@confidential-perps/sdk": "workspace:*",
-    "@arcium-hq/client": "0.10.3",
+    "@arcium-hq/client": "0.10.2",
     "@solana/web3.js": "^1.95.0"
   },
   "devDependencies": {
