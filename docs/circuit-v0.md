@@ -118,15 +118,15 @@ This keeps the matching circuit focused on its one job.
 
 ---
 
-## Open questions for the human
+## Locked decisions (v0)
 
-1. **Reveal clearing price?** I'd vote yes (matches Drift, helps verifiability, simplifies merkle proofs). Hiding it is doable but costlier and harder to debug.
-2. **Per-user multiple positions?** Handover cut list item #1 says one position per user. Lock at one for v0?
-3. **Partial fills at the marginal price level — pro-rata or time-priority?** Pro-rata is simpler in MPC (no per-order timestamp). Recommend pro-rata for v0.
-4. **`MAX_ORDERS = 8`** for v0 — agree? Lets us iterate fast. Bump after Week 3 when we know the per-order ACU cost.
-5. **Pyth oracle band.** What's "X%" — 5%? 10%? Need to pin so the circuit can constrain it.
-6. **Nonces for orders.** Per-order client-chosen `nonce` lets the client correlate fills back to specific submitted orders. Open: should the program also track these to prevent replays?
-7. **No-match outcome.** When no clearing price exists, what does the callback do? Refund margin, emit a NoMatch event? Or do nothing and let orders carry to next batch?
+1. **Reveal clearing price.** Public per-batch. Matches Drift; debuggable; v2 can hide it later.
+2. **One position per user.** Fills aggregate into a single position. Smaller merkle tree, simpler state.
+3. **Pro-rata partial fills** at the marginal price level. No timestamps needed; MPC-friendly.
+4. **`MAX_ORDERS = 8`.** Re-measure ACUs after Week 3, bump to 16/32 then.
+5. **Pyth band: ±5%.** Clearing price outside `[oracle * 0.95, oracle * 1.05]` → NoMatch.
+6. **Nonces: client-side only.** Each order carries a `u64` client nonce so the client can correlate the encrypted fill back to its order. Program never reads it. Replay protection: Solana blockhash + signatures on `submit_order`.
+7. **No-match: refund + event.** When circuit returns sentinel `clearing_price = 0`, the callback unlocks each order's margin and emits a public `NoMatchEvent { batch_id, oracle_price }`.
 
 ---
 
