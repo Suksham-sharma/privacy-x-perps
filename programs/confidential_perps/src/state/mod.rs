@@ -8,16 +8,21 @@ pub struct Market {
     pub admin: Pubkey,            // vestigial — no admin instructions exist
     pub pyth_feed: Pubkey,        // locked at init
     pub usdc_mint: Pubkey,
-    pub usdc_vault: Pubkey,       // program-owned USDC ATA
+    pub usdc_vault: Pubkey,       // program-controlled USDC ATA (authority = this Market PDA)
     pub batch_window_slots: u64,
     pub current_batch_id: u64,
     pub bump: u8,
+
+    // Per-slot withdrawal rate limiter.
+    pub rate_limit_slot: u64,       // last slot at which the snapshot was taken
+    pub rate_limit_vault_snapshot: u64, // vault balance at start of that slot
+    pub rate_limit_withdrawn: u64,  // sum withdrawn in that slot
 }
 
 impl Market {
-    // discriminator (8) + admin (32) + pyth (32) + mint (32) + vault (32)
-    //   + window (8) + batch_id (8) + bump (1)
-    pub const SIZE: usize = 8 + 32 + 32 + 32 + 32 + 8 + 8 + 1;
+    // discriminator + admin + pyth + mint + vault + window + batch_id + bump
+    //   + rate_limit_slot + rate_limit_vault_snapshot + rate_limit_withdrawn
+    pub const SIZE: usize = 8 + 32 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 8 + 8;
 }
 
 // One encrypted order slot in the batch buffer.
@@ -33,7 +38,6 @@ pub struct EncryptedOrderSlot {
 }
 
 impl EncryptedOrderSlot {
-    // 32 + 32 + 16 + 4 * 32
     pub const SIZE: usize = 32 + 32 + 16 + 32 + 32 + 32 + 32;
 }
 
@@ -49,7 +53,18 @@ pub struct BatchBuffer {
 }
 
 impl BatchBuffer {
-    // discriminator (8) + market (32) + batch_id (8) + n_orders (1) + opened_at (8)
-    //   + orders (MAX_ORDERS * SLOT) + bump (1)
     pub const SIZE: usize = 8 + 32 + 8 + 1 + 8 + (MAX_ORDERS * EncryptedOrderSlot::SIZE) + 1;
+}
+
+// Per-user collateral balance (USDC base units, held in Market.usdc_vault).
+#[account]
+pub struct UserCollateral {
+    pub owner: Pubkey,
+    pub balance: u64,
+    pub bump: u8,
+}
+
+impl UserCollateral {
+    // discriminator + owner + balance + bump
+    pub const SIZE: usize = 8 + 32 + 8 + 1;
 }

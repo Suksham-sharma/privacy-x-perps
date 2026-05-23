@@ -24,4 +24,12 @@ pub enum ErrorCode {
     MarketAlreadyInitialized,
     #[msg("Invalid Pyth feed")]
     InvalidPythFeed,
+    #[msg("Insufficient collateral balance")]
+    InsufficientCollateral,
+    #[msg("Withdrawal would exceed per-slot rate limit (5% of vault)")]
+    WithdrawRateLimitExceeded,
+    #[msg("Math overflow")]
+    MathOverflow,
+    #[msg("Amount must be greater than zero")]
+    ZeroAmount,
 }

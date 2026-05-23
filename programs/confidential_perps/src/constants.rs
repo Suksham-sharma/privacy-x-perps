@@ -10,6 +10,13 @@ pub const MARKET_SEED: &[u8] = b"market";
 #[constant]
 pub const BATCH_BUFFER_SEED: &[u8] = b"batch";
 
+#[constant]
+pub const USER_COLLATERAL_SEED: &[u8] = b"collateral";
+
+// Drift-hack defensive: per-slot withdrawal cap = 5% of vault snapshot.
+pub const WITHDRAW_RATE_LIMIT_BPS: u64 = 500;
+pub const BPS_DENOMINATOR: u64 = 10_000;
+
 // Batch auction params. Tune in Week 3 once we measure ACUs.
 pub const MAX_ORDERS: usize = 8;
 

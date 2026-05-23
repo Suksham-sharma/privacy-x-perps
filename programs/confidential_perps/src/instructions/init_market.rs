@@ -3,6 +3,10 @@ use crate::{
     state::{BatchBuffer, EncryptedOrderSlot, Market},
 };
 use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token::{Mint, Token, TokenAccount},
+};
 
 #[derive(Accounts)]
 pub struct InitMarket<'info> {
@@ -27,15 +31,21 @@ pub struct InitMarket<'info> {
     )]
     pub batch_buffer: Box<Account<'info, BatchBuffer>>,
 
-    /// CHECK: locked into Market; not dereferenced here. Pyth client validates on read.
+    /// CHECK: stored on Market; not dereferenced here. Pyth client validates on read.
     pub pyth_feed: UncheckedAccount<'info>,
 
-    /// CHECK: locked into Market; vault ATA created off-chain or in a follow-up ix.
-    pub usdc_mint: UncheckedAccount<'info>,
+    pub usdc_mint: Box<Account<'info, Mint>>,
 
-    /// CHECK: locked into Market; assumed to be admin's program-derived USDC ATA.
-    pub usdc_vault: UncheckedAccount<'info>,
+    #[account(
+        init,
+        payer = admin,
+        associated_token::mint = usdc_mint,
+        associated_token::authority = market,
+    )]
+    pub usdc_vault: Box<Account<'info, TokenAccount>>,
 
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -48,6 +58,9 @@ pub fn init_market_handler(ctx: Context<InitMarket>) -> Result<()> {
     m.batch_window_slots = DEFAULT_BATCH_WINDOW_SLOTS;
     m.current_batch_id = 0;
     m.bump = ctx.bumps.market;
+    m.rate_limit_slot = 0;
+    m.rate_limit_vault_snapshot = 0;
+    m.rate_limit_withdrawn = 0;
 
     let b = &mut ctx.accounts.batch_buffer;
     b.market = m.key();

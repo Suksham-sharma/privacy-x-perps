@@ -58,4 +58,14 @@ pub mod confidential_perps {
             ctx, x25519_pubkey, nonce, ct_side, ct_price, ct_size, ct_client_nonce,
         )
     }
+
+    // -- collateral --
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        deposit::deposit_handler(ctx, amount)
+    }
+
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+        withdraw::withdraw_handler(ctx, amount)
+    }
 }
