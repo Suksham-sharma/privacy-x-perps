@@ -72,7 +72,6 @@ describe("perp engine e2e", () => {
         .rpc({ skipPreflight: true, commitment: "confirmed" });
 
       const market = await program.account.market.fetch(marketPda);
-      expect(market.admin.toBase58()).to.equal(admin.publicKey.toBase58());
       expect(market.pythFeed.toBase58()).to.equal(pythFeed.toBase58());
       expect(market.usdcMint.toBase58()).to.equal(usdcMint.toBase58());
       expect(market.usdcVault.toBase58()).to.equal(vaultAta.toBase58());

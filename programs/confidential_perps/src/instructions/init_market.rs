@@ -51,7 +51,6 @@ pub struct InitMarket<'info> {
 
 pub fn init_market_handler(ctx: Context<InitMarket>) -> Result<()> {
     let m = &mut ctx.accounts.market;
-    m.admin = ctx.accounts.admin.key();
     m.pyth_feed = ctx.accounts.pyth_feed.key();
     m.usdc_mint = ctx.accounts.usdc_mint.key();
     m.usdc_vault = ctx.accounts.usdc_vault.key();

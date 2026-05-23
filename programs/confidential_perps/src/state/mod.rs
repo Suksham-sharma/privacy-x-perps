@@ -3,9 +3,9 @@ use anchor_lang::prelude::*;
 use crate::constants::MAX_ORDERS;
 
 // SOL-PERP market. Init once, immutable thereafter (Drift-hack defensive).
+// No admin field by design — no admin instructions exist, ever.
 #[account]
 pub struct Market {
-    pub admin: Pubkey,            // vestigial — no admin instructions exist
     pub pyth_feed: Pubkey,        // locked at init
     pub usdc_mint: Pubkey,
     pub usdc_vault: Pubkey,       // program-controlled USDC ATA (authority = this Market PDA)
@@ -20,9 +20,9 @@ pub struct Market {
 }
 
 impl Market {
-    // discriminator + admin + pyth + mint + vault + window + batch_id + bump
+    // discriminator + pyth + mint + vault + window + batch_id + bump
     //   + rate_limit_slot + rate_limit_vault_snapshot + rate_limit_withdrawn
-    pub const SIZE: usize = 8 + 32 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 8 + 8;
+    pub const SIZE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 8 + 8;
 }
 
 // One encrypted order slot in the batch buffer.

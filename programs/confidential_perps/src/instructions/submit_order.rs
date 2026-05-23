@@ -44,7 +44,10 @@ pub fn submit_order_handler(
     if buf.n_orders == 0 {
         buf.opened_at_slot = now_slot;
     } else {
-        let closes_at = buf.opened_at_slot + market.batch_window_slots;
+        let closes_at = buf
+            .opened_at_slot
+            .checked_add(market.batch_window_slots)
+            .ok_or(ErrorCode::MathOverflow)?;
         require!(now_slot < closes_at, ErrorCode::BatchWindowClosed);
     }
 
@@ -58,7 +61,7 @@ pub fn submit_order_handler(
         ct_size,
         ct_client_nonce,
     };
-    buf.n_orders += 1;
+    buf.n_orders = buf.n_orders.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
 
     Ok(())
 }
