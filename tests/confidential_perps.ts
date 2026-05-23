@@ -185,7 +185,7 @@ describe("ConfidentialPerps", () => {
 async function getMXEPublicKeyWithRetry(
   provider: anchor.AnchorProvider,
   programId: PublicKey,
-  maxRetries: number = 20,
+  maxRetries: number = 60,
   retryDelayMs: number = 500,
 ): Promise<Uint8Array> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {

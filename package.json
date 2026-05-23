@@ -1,6 +1,8 @@
 {
   "license": "ISC",
   "scripts": {
+    "test": "arcium test --skip-keygen",
+    "test:keygen": "arcium test",
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
   },
