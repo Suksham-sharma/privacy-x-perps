@@ -66,19 +66,24 @@ mod circuits {
         let bid_size = if a_is_bid { a.size } else { b.size };
         let ask_size = if a_is_bid { b.size } else { a.size };
 
-        // Exactly one long + one short.
-        let valid_sides = a.side != b.side;
+        // Sides must each be in {0, 1} and differ. The bid/ask picker above
+        // only treats side==0 as bid; without the bounds check, side==2 (or
+        // higher) would silently slot into "ask" and corrupt the match.
+        let a_side_valid = a.side <= 1u8;
+        let b_side_valid = b.side <= 1u8;
+        let valid_sides = a_side_valid && b_side_valid && a.side != b.side;
 
         // Orders cross.
         let crossing = bid_price >= ask_price;
 
-        // Midpoint clearing price (no division loss for tick math; widening to u128
-        // would be safer at scale — fine for v0 since u64::MAX / 2 still fits).
-        let clearing = (bid_price + ask_price) / 2u64;
+        // Midpoint clearing price. u128 widening prevents overflow at extreme
+        // tick values (u64::MAX bid + u64::MAX ask would otherwise wrap).
+        let clearing = (((bid_price as u128) + (ask_price as u128)) / 2u128) as u64;
 
-        // Oracle band check: oracle * (10000 ± 500) / 10000.
-        let band_lo = (oracle_price * 9500u64) / 10_000u64;
-        let band_hi = (oracle_price * 10_500u64) / 10_000u64;
+        // Oracle band: clearing ∈ oracle * [9500/10000, 10500/10000]. Same
+        // u128 widening — oracle_price * 10500 overflows u64 above ~1.76e15.
+        let band_lo = (((oracle_price as u128) * 9500u128) / 10_000u128) as u64;
+        let band_hi = (((oracle_price as u128) * 10_500u128) / 10_000u128) as u64;
         let in_band = clearing >= band_lo && clearing <= band_hi;
 
         let matched = valid_sides && crossing && in_band;
