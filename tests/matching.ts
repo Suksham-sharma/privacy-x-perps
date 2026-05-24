@@ -10,16 +10,37 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
-import { randomBytes } from "crypto";
+import { getMXEPublicKey } from "@arcium-hq/client";
+import {
+  deriveMarketPda,
+  deriveBatchBufferPda,
+  deriveUserCollateralPda,
+  encryptOrder,
+  toSubmitOrderArgs,
+  decryptFill,
+  type OrderPlaintext,
+} from "@confidential-perps/sdk";
 import { expect } from "chai";
 import { ConfidentialPerps } from "../target/types/confidential_perps";
 
-const MARKET_SEED = Buffer.from("market");
-const BATCH_BUFFER_SEED = Buffer.from("batch");
-const USER_COLLATERAL_SEED = Buffer.from("collateral");
-
 const USDC_DECIMALS = 6;
 const ONE_USDC = 10n ** BigInt(USDC_DECIMALS);
+
+async function getMxePubkeyWithRetry(
+  provider: anchor.AnchorProvider,
+  programId: PublicKey,
+  attempts = 60,
+  delayMs = 500,
+): Promise<Uint8Array> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const k = await getMXEPublicKey(provider, programId);
+      if (k) return k;
+    } catch {}
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  throw new Error("MXE pubkey unavailable after retries");
+}
 
 describe("perp engine e2e", () => {
   anchor.setProvider(anchor.AnchorProvider.env());
@@ -27,22 +48,16 @@ describe("perp engine e2e", () => {
   const provider = anchor.getProvider() as anchor.AnchorProvider;
   const admin = (provider.wallet as anchor.Wallet).payer;
 
-  const pythFeed = Keypair.generate().publicKey; // placeholder; Market only stores the key
+  const pythFeed = Keypair.generate().publicKey;
 
-  const [marketPda] = PublicKey.findProgramAddressSync(
-    [MARKET_SEED],
-    program.programId,
-  );
-  const [batchBufferPda] = PublicKey.findProgramAddressSync(
-    [BATCH_BUFFER_SEED, marketPda.toBuffer()],
-    program.programId,
-  );
+  const [marketPda] = deriveMarketPda(program.programId);
+  const [batchBufferPda] = deriveBatchBufferPda(marketPda, program.programId);
 
   let usdcMint: PublicKey;
   let vaultAta: PublicKey;
+  let mxePublicKey: Uint8Array;
 
   before(async () => {
-    // Real USDC-style mint, admin = mint authority.
     usdcMint = await createMint(
       provider.connection,
       admin,
@@ -51,6 +66,7 @@ describe("perp engine e2e", () => {
       USDC_DECIMALS,
     );
     vaultAta = await getAssociatedTokenAddress(usdcMint, marketPda, true);
+    mxePublicKey = await getMxePubkeyWithRetry(provider, program.programId);
   });
 
   describe("init", () => {
@@ -82,33 +98,27 @@ describe("perp engine e2e", () => {
     });
   });
 
-  describe("submit_order", () => {
-    it("accepts 3 submit_order calls and stores ciphertexts in order", async () => {
+  describe("submit_order with real SDK encryption", () => {
+    it("encrypts 3 orders via the SDK and stores their ciphertexts on-chain", async () => {
       const users = [Keypair.generate(), Keypair.generate(), Keypair.generate()];
       for (const u of users) {
         const sig = await provider.connection.requestAirdrop(u.publicKey, 1e9);
         await provider.connection.confirmTransaction(sig, "confirmed");
       }
 
-      const orders = users.map(() => ({
-        x25519Pubkey: Array.from(randomBytes(32)),
-        nonce: new anchor.BN(randomBytes(8), "hex"),
-        ctSide: Array.from(randomBytes(32)),
-        ctPrice: Array.from(randomBytes(32)),
-        ctSize: Array.from(randomBytes(32)),
-        ctClientNonce: Array.from(randomBytes(32)),
-      }));
+      // Three distinct plaintext orders. SDK does the encryption.
+      const plaintexts: OrderPlaintext[] = [
+        { side: 0n, price: 100_000n, size: 1_000n, clientNonce: 1n },  // long
+        { side: 1n, price: 101_000n, size: 2_000n, clientNonce: 2n },  // short
+        { side: 0n, price: 99_500n,  size: 500n,   clientNonce: 3n },  // long
+      ];
+      const encrypted = plaintexts.map((p) => encryptOrder(p, mxePublicKey));
+      const argsList = encrypted.map(toSubmitOrderArgs);
 
       for (let i = 0; i < users.length; i++) {
+        const a = argsList[i];
         await program.methods
-          .submitOrder(
-            orders[i].x25519Pubkey,
-            orders[i].nonce,
-            orders[i].ctSide,
-            orders[i].ctPrice,
-            orders[i].ctSize,
-            orders[i].ctClientNonce,
-          )
+          .submitOrder(a.x25519Pubkey, a.nonce, a.ctSide, a.ctPrice, a.ctSize, a.ctClientNonce)
           .accounts({
             user: users[i].publicKey,
             market: marketPda,
@@ -120,14 +130,37 @@ describe("perp engine e2e", () => {
 
       const buffer = await program.account.batchBuffer.fetch(batchBufferPda);
       expect(buffer.nOrders).to.equal(3);
+
+      // The on-chain ciphertexts must match what the SDK produced.
       for (let i = 0; i < 3; i++) {
         expect(buffer.orders[i].owner.toBase58()).to.equal(
           users[i].publicKey.toBase58(),
         );
         expect(Buffer.from(buffer.orders[i].ctPrice)).to.deep.equal(
-          Buffer.from(orders[i].ctPrice),
+          Buffer.from(encrypted[i].ctPrice),
         );
       }
+    });
+
+    it("round-trips the first field through encrypt then decryptFill", async () => {
+      // decryptFill is the one-ciphertext path (what match_batch_callback will
+      // hand each owner: a re-encrypted fill at cipher offset 0). Encrypt
+      // -> decrypt only the first field, which lives at offset 0.
+      const plaintext: OrderPlaintext = {
+        side: 1n,
+        price: 12_345n,
+        size: 678n,
+        clientNonce: 42n,
+      };
+      const e = encryptOrder(plaintext, mxePublicKey);
+
+      const decryptedSide = decryptFill(
+        e.ctSide,
+        e.nonce,
+        e.privateKey,
+        mxePublicKey,
+      );
+      expect(decryptedSide).to.equal(plaintext.side);
     });
   });
 
@@ -148,7 +181,6 @@ describe("perp engine e2e", () => {
       );
       aliceAta = ata.address;
 
-      // Mint 1000 USDC to alice.
       await mintTo(
         provider.connection,
         admin,
@@ -158,8 +190,9 @@ describe("perp engine e2e", () => {
         Number(1000n * ONE_USDC),
       );
 
-      [aliceCollateralPda] = PublicKey.findProgramAddressSync(
-        [USER_COLLATERAL_SEED, marketPda.toBuffer(), alice.publicKey.toBuffer()],
+      [aliceCollateralPda] = deriveUserCollateralPda(
+        marketPda,
+        alice.publicKey,
         program.programId,
       );
     });
@@ -190,7 +223,6 @@ describe("perp engine e2e", () => {
     });
 
     it("withdraws an amount within the per-slot rate limit", async () => {
-      // 5% of 500 USDC = 25 USDC. Withdraw 10 USDC.
       const amount = new anchor.BN(Number(10n * ONE_USDC));
 
       await program.methods
@@ -211,7 +243,6 @@ describe("perp engine e2e", () => {
     });
 
     it("rejects a withdraw that breaches the 5% per-slot cap", async () => {
-      // Vault snapshot ~490 USDC. 5% cap = ~24.5. Try to withdraw 100 — exceeds.
       const amount = new anchor.BN(Number(100n * ONE_USDC));
 
       const balanceBefore = (
@@ -220,8 +251,6 @@ describe("perp engine e2e", () => {
 
       let failed = false;
       try {
-        // Preflight on, so we get the program error back instead of a generic
-        // SendTransactionError that drops the logs.
         await program.methods
           .withdraw(amount)
           .accounts({
@@ -241,7 +270,6 @@ describe("perp engine e2e", () => {
       }
       expect(failed).to.equal(true);
 
-      // Balance unchanged — the failed withdraw didn't leak.
       const balanceAfter = (
         await program.account.userCollateral.fetch(aliceCollateralPda)
       ).balance.toString();
