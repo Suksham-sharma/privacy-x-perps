@@ -23,60 +23,59 @@ mod toolchain_canary {
 
 // match_batch v0 — two-order uniform-price match.
 //
-// Scope per handover Week 2 deliverable: "2-order batch matches in Arcis".
-// On-chain BatchBuffer keeps 8 slots; for v0 process_batch will only queue
-// the computation when exactly 2 orders are buffered. Once this end-to-end
-// flow works, v0.1 extends to MAX_ORDERS=8 with a bitonic sort.
+// Privacy model (v0 — see docs/circuit-v0.md "v0 vs v0.2"):
+//   - ORDERS are encrypted during matching — the moat. MPC sees plaintext
+//     only inside the circuit; no individual node sees an order's contents.
+//     This prevents pre-trade leakage (front-running, strategy copying).
+//   - FILLS are revealed publicly via .reveal(). The callback applies each
+//     fill to UserCollateral / Position directly. Same model as a dark pool
+//     that prints fills to the tape post-trade.
+//   - Why this isn't a privacy regression vs encrypted-fill (Path B): in
+//     v0 the on-chain UserCollateral and Position PDAs are public, so any
+//     fill leaks its size through state deltas regardless of whether the
+//     fill *instruction* was encrypted. Hash-commit fill delivery only
+//     becomes a real privacy primitive once Position is encrypted (task
+//     #21) — that's v0.2.
 //
-// Inputs:
-//   a, b           — two orders, each encrypted under its own owner's
-//                    Shared key with the MXE.
-//   oracle_price   — public Pyth reference (ticks).
-//
-// Outputs (one per owner):
-//   Fill { fill_size, fill_price, side, client_nonce } re-encrypted back
-//   to each owner's Shared key. fill_size == 0 means "your order didn't
-//   fill in this batch" (callers handle margin refund on-chain).
-//
-// Algorithm (data-oblivious — every branch is a conditional select):
-//   1. Identify which input is the bid (side=0) and which is the ask (side=1).
-//   2. Require exactly one of each (otherwise no match).
-//   3. Require bid_price >= ask_price (orders cross).
-//   4. Clearing price = midpoint of bid_price and ask_price.
-//   5. Require clearing price within ±5% of oracle.
-//   6. Fill size = min(bid_size, ask_size).
-//   7. If any check fails, fill_size = 0 and fill_price = 0.
+// Outputs (all PUBLIC, revealed via Struct{..}.reveal()):
+//   clearing_price — matched price; 0 if no match.
+//   total_volume   — sum of all fills; equals fill_a_size in v0 since the
+//                    two sides must trade the same lots.
+//   fill_a_size    — lots filled for input a (0 if no match).
+//   fill_a_side    — 0 long / 1 short, copied through.
+//   fill_b_size    — same for b.
+//   fill_b_side    — same for b.
+// The on-chain callback applies fill_a to BatchBuffer.orders[0].owner
+// and fill_b to BatchBuffer.orders[1].owner.
 
 #[encrypted]
 mod circuits {
     use arcis::*;
 
-    // Mirrors EncryptedOrderSlot's plaintext shape (see programs state/mod.rs).
     #[derive(Copy, Clone)]
     pub struct Order {
         pub side: u8,           // 0 = long, 1 = short
         pub price: u64,         // ticks
         pub size: u64,          // lots
-        pub client_nonce: u64,  // client-chosen correlation tag
+        pub client_nonce: u64,  // client-side correlation tag (not used on-chain)
     }
 
     #[derive(Copy, Clone)]
-    pub struct Fill {
-        pub fill_size: u64,
-        pub fill_price: u64,    // ticks; 0 if unfilled
-        pub side: u8,
-        pub client_nonce: u64,
+    pub struct BatchOutput {
+        pub clearing_price: u64,
+        pub total_volume: u64,
+        pub fill_a_size: u64,
+        pub fill_a_side: u8,
+        pub fill_b_size: u64,
+        pub fill_b_side: u8,
     }
-
-    // Oracle band: clearing price must satisfy oracle*(1-0.05) <= p <= oracle*(1+0.05).
-    // BPS = 10_000, ORACLE_BAND_BPS = 500.
 
     #[instruction]
     pub fn match_batch(
         a_ctxt: Enc<Shared, Order>,
         b_ctxt: Enc<Shared, Order>,
         oracle_price: u64,
-    ) -> (Enc<Shared, Fill>, Enc<Shared, Fill>) {
+    ) -> BatchOutput {
         let a = a_ctxt.to_arcis();
         let b = b_ctxt.to_arcis();
 
@@ -87,51 +86,38 @@ mod circuits {
         let bid_size = if a_is_bid { a.size } else { b.size };
         let ask_size = if a_is_bid { b.size } else { a.size };
 
-        // Sides must each be in {0, 1} and differ. The bid/ask picker above
-        // only treats side==0 as bid; without the bounds check, side==2 (or
-        // higher) would silently slot into "ask" and corrupt the match.
-        let a_side_valid = a.side <= 1u8;
-        let b_side_valid = b.side <= 1u8;
-        let valid_sides = a_side_valid && b_side_valid && a.side != b.side;
+        // Sides must each be in {0, 1} and differ.
+        let valid_sides = a.side <= 1u8 && b.side <= 1u8 && a.side != b.side;
 
         // Orders cross.
         let crossing = bid_price >= ask_price;
 
-        // Midpoint clearing price. u128 widening prevents overflow at extreme
-        // tick values (u64::MAX bid + u64::MAX ask would otherwise wrap).
+        // Midpoint clearing price with u128 widening (overflow-safe).
         let clearing = (((bid_price as u128) + (ask_price as u128)) / 2u128) as u64;
 
-        // Oracle band: clearing ∈ oracle * [9500/10000, 10500/10000]. Same
-        // u128 widening — oracle_price * 10500 overflows u64 above ~1.76e15.
+        // Oracle band: clearing ∈ oracle * [9500/10000, 10500/10000].
         let band_lo = (((oracle_price as u128) * 9500u128) / 10_000u128) as u64;
         let band_hi = (((oracle_price as u128) * 10_500u128) / 10_000u128) as u64;
         let in_band = clearing >= band_lo && clearing <= band_hi;
 
         let matched = valid_sides && crossing && in_band;
 
-        // Min(bid_size, ask_size) — data-oblivious.
+        // Fill size = min(bid_size, ask_size); zero on no-match.
         let raw_fill_size = if bid_size < ask_size { bid_size } else { ask_size };
+        let final_fill_size = if matched { raw_fill_size } else { 0u64 };
+        let final_clearing = if matched { clearing } else { 0u64 };
 
-        // If any check failed, zero out the fill.
-        let fill_size = if matched { raw_fill_size } else { 0u64 };
-        let fill_price = if matched { clearing } else { 0u64 };
-
-        let fill_a = Fill {
-            fill_size,
-            fill_price,
-            side: a.side,
-            client_nonce: a.client_nonce,
-        };
-        let fill_b = Fill {
-            fill_size,
-            fill_price,
-            side: b.side,
-            client_nonce: b.client_nonce,
-        };
-
-        (
-            a_ctxt.owner.from_arcis(fill_a),
-            b_ctxt.owner.from_arcis(fill_b),
-        )
+        // Reveal happens via Struct{..}.reveal() at the top level — outside
+        // any conditional. All fields collapse to a single committed value
+        // before reveal, so no branch information leaks.
+        BatchOutput {
+            clearing_price: final_clearing,
+            total_volume: final_fill_size,
+            fill_a_size: final_fill_size,
+            fill_a_side: a.side,
+            fill_b_size: final_fill_size,
+            fill_b_side: b.side,
+        }
+        .reveal()
     }
 }

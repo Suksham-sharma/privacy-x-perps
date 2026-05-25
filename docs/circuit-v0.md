@@ -24,16 +24,52 @@ What the circuit must do, in one batch:
 
 ## What's encrypted vs public
 
-| Field | Encrypted | Public | Notes |
+> **v0 reality check (added after research):** in v0 the on-chain UserCollateral
+> and (future plain) Position PDAs are publicly readable. Any fill leaks its size
+> through state deltas regardless of whether the fill instruction itself was
+> encrypted. So in v0 we don't try to encrypt fill *delivery* — we lean on order
+> encryption (the moat). Encrypted fill delivery becomes meaningful in **v0.2**
+> when Position is stored as an encrypted commitment (task #21); see the v0 vs
+> v0.2 section below.
+
+| Field | Encrypted (v0) | Public (v0) | Notes |
 |---|---|---|---|
-| Order side, price, size, owner | ✓ | | Each order is a `Enc<Shared, Order>` |
-| Oracle price (Pyth) | | ✓ | Constraint / reference. Public input to the circuit. |
-| Market params (tick size, lot size, max deviation from oracle) | | ✓ | Constants. |
-| Per-order fill (price, size) | ✓ | | Re-encrypted to each owner. |
-| Clearing price | ? | ? | **Open question.** Revealing helps with verifiability and post-trade transparency; hiding maximizes information protection. Drift-style DEXes reveal it. CEX dark pools hide it. |
-| Total volume per batch | | ✓ | Useful for funding rate / TWAP feeds. Reveal. |
-| Position commitment (after update) | ✓ (commitment) | hash visible | Pedersen / threshold-encrypted commitment. Hash goes into merkle root. |
-| Liquidation reveal | | ✓ | Option A: when underwater, position is revealed to the keeper. |
+| Order side, price, size, owner | ✓ | | Each order is a `Enc<Shared, Order>`. The moat. |
+| Oracle price (Pyth) | | ✓ | Public input to the circuit. |
+| Market params (tick, lot, oracle band) | | ✓ | Constants. |
+| Per-order fill (size, side) | | ✓ | Revealed via `BatchOutput { .. }.reveal()`. Callback applies directly. |
+| Clearing price | | ✓ | Revealed (locked decision). |
+| Total volume per batch | | ✓ | Revealed (locked decision). |
+| Position state (v0) | | ✓ | Plain `Position` PDA for v0; encrypted in v0.2. |
+| Position commitment (v0.2) | ✓ (Pedersen / threshold) | hash visible | Future. Hash goes into merkle root. |
+| Liquidation reveal | | ✓ | Option A: when underwater, position revealed. |
+
+## v0 vs v0.2: why fill delivery isn't encrypted in v0
+
+We considered a hash-commitment fill flow (encrypted Fill blob delivered to
+each owner + public SHA3-256 commitment + later `claim_fill` instruction
+that reconstructs the hash). Built it, measured 1.83B ACUs vs 711M without.
+Then traced what an observer actually sees:
+
+```
+Path A (revealed fills):    block N — Alice.balance: 100 → 95
+Path B (hash-commit claim): block N+k — Alice.balance: 100 → 95
+```
+
+Both leak the same delta. Path B just delays it by `k` blocks. **The leak
+isn't through the fill instruction; it's through the public state update.**
+Encrypting the fill blob is performative privacy in v0.
+
+To close the side-channel, the *state being updated* has to be hidden too.
+That's a Position-state question, not a fill-delivery question. Hence:
+
+- **v0** (now) — revealed fills, plain Position state. Moat = order encryption.
+- **v0.2** (after task #21) — encrypted Position commitments via Pedersen /
+  threshold encryption. *Then* hash-commit fills add real privacy, because
+  Alice's commitment delta no longer reveals the fill size.
+
+The hash-commit pattern isn't wasted work — it's the right primitive for
+v0.2. Captured the design in this commit and reverted to v0 simplicity.
 
 ---
 
