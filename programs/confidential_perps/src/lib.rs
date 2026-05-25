@@ -59,6 +59,12 @@ pub mod confidential_perps {
         )
     }
 
+    // -- match_batch comp def init (one-time deploy step) --
+
+    pub fn init_match_batch_comp_def(ctx: Context<InitMatchBatchCompDef>) -> Result<()> {
+        match_batch::init_match_batch_comp_def_handler(ctx)
+    }
+
     // -- collateral --
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {

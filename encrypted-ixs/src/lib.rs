@@ -1,5 +1,26 @@
 use arcis::*;
 
+// add_together — kept as a toolchain canary. tests/confidential_perps.ts
+// drives it end-to-end on localnet to prove the MXE keygen + queue +
+// callback pipeline works in isolation, independent of our matching logic.
+
+#[encrypted]
+mod toolchain_canary {
+    use arcis::*;
+
+    pub struct InputValues {
+        v1: u8,
+        v2: u8,
+    }
+
+    #[instruction]
+    pub fn add_together(input_ctxt: Enc<Shared, InputValues>) -> Enc<Shared, u16> {
+        let input = input_ctxt.to_arcis();
+        let sum = input.v1 as u16 + input.v2 as u16;
+        input_ctxt.owner.from_arcis(sum)
+    }
+}
+
 // match_batch v0 — two-order uniform-price match.
 //
 // Scope per handover Week 2 deliverable: "2-order batch matches in Arcis".
