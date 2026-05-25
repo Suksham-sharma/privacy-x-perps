@@ -13,6 +13,9 @@ pub const BATCH_BUFFER_SEED: &[u8] = b"batch";
 #[constant]
 pub const USER_COLLATERAL_SEED: &[u8] = b"collateral";
 
+#[constant]
+pub const POSITION_SEED: &[u8] = b"position";
+
 // Drift-hack defensive: per-slot withdrawal cap = 5% of vault snapshot.
 pub const WITHDRAW_RATE_LIMIT_BPS: u64 = 500;
 pub const BPS_DENOMINATOR: u64 = 10_000;

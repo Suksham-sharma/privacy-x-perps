@@ -49,13 +49,21 @@ pub mod confidential_perps {
         ctx: Context<SubmitOrder>,
         x25519_pubkey: [u8; 32],
         nonce: u128,
+        max_margin: u64,
         ct_side: [u8; 32],
         ct_price: [u8; 32],
         ct_size: [u8; 32],
         ct_client_nonce: [u8; 32],
     ) -> Result<()> {
         submit_order::submit_order_handler(
-            ctx, x25519_pubkey, nonce, ct_side, ct_price, ct_size, ct_client_nonce,
+            ctx,
+            x25519_pubkey,
+            nonce,
+            max_margin,
+            ct_side,
+            ct_price,
+            ct_size,
+            ct_client_nonce,
         )
     }
 
@@ -63,6 +71,14 @@ pub mod confidential_perps {
 
     pub fn init_match_batch_comp_def(ctx: Context<InitMatchBatchCompDef>) -> Result<()> {
         match_batch::init_match_batch_comp_def_handler(ctx)
+    }
+
+    #[arcium_callback(encrypted_ix = "match_batch")]
+    pub fn match_batch_callback(
+        ctx: Context<MatchBatchCallback>,
+        output: SignedComputationOutputs<MatchBatchOutput>,
+    ) -> Result<()> {
+        match_batch::match_batch_callback_handler(ctx, output)
     }
 
     // -- collateral --

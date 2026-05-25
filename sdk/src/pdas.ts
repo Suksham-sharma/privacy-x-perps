@@ -5,6 +5,7 @@ import { PublicKey } from "@solana/web3.js";
 export const MARKET_SEED = Buffer.from("market");
 export const BATCH_BUFFER_SEED = Buffer.from("batch");
 export const USER_COLLATERAL_SEED = Buffer.from("collateral");
+export const POSITION_SEED = Buffer.from("position");
 
 export function deriveMarketPda(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([MARKET_SEED], programId);
@@ -27,6 +28,17 @@ export function deriveUserCollateralPda(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [USER_COLLATERAL_SEED, market.toBuffer(), user.toBuffer()],
+    programId,
+  );
+}
+
+export function derivePositionPda(
+  market: PublicKey,
+  owner: PublicKey,
+  programId: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [POSITION_SEED, market.toBuffer(), owner.toBuffer()],
     programId,
   );
 }

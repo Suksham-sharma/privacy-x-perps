@@ -26,11 +26,19 @@ impl Market {
 }
 
 // One encrypted order slot in the batch buffer.
+//
+// max_margin is PUBLIC by design — it's the USDC base-unit amount locked
+// from UserCollateral.balance at submit_order. Refunded on NoMatch; retained
+// on any fill (v0 doesn't refund partial-fill excess because the circuit
+// doesn't reveal original size — only fill_size — so a proportional refund
+// would leak the order size). v0 trusts the user to size max_margin against
+// their own encrypted notional; circuit-side margin validation is v0.2.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct EncryptedOrderSlot {
     pub owner: Pubkey,            // for fill / refund routing
     pub x25519_pubkey: [u8; 32],  // client ephemeral pubkey for the shared secret
     pub nonce: u128,              // per-order encryption nonce
+    pub max_margin: u64,          // USDC base units locked at submit; see note above
     pub ct_side: [u8; 32],        // encrypted: 0 long / 1 short
     pub ct_price: [u8; 32],       // encrypted: ticks
     pub ct_size: [u8; 32],        // encrypted: lots
@@ -38,7 +46,7 @@ pub struct EncryptedOrderSlot {
 }
 
 impl EncryptedOrderSlot {
-    pub const SIZE: usize = 32 + 32 + 16 + 32 + 32 + 32 + 32;
+    pub const SIZE: usize = 32 + 32 + 16 + 8 + 32 + 32 + 32 + 32;
 }
 
 // Rolling buffer. Reused across batches: process_batch resets n_orders and bumps batch_id.
@@ -67,4 +75,31 @@ pub struct UserCollateral {
 impl UserCollateral {
     // discriminator + owner + balance + bump
     pub const SIZE: usize = 8 + 32 + 8 + 1;
+}
+
+// Per-user perp position. One per (market, owner). Plain (publicly readable)
+// in v0 — see docs/circuit-v0.md "v0 vs v0.2". Encrypted commitment variant
+// is task #21 / v0.2.
+//
+// Units:
+//   base_amount_lots — signed lots of base (SOL). + long, - short.
+//                       lots, not raw base; LOT_SIZE conversion happens at
+//                       close-time PnL settlement.
+//   quote_entry     — signed cumulative cost basis in lot-ticks
+//                       (sum over fills of ±fill_size_lots * clearing_price_ticks).
+//                       Negative when long (you paid quote), positive when short
+//                       (you received quote). Stored raw — TICK_SIZE * LOT_SIZE
+//                       USDC base-unit conversion deferred to close. i128 to
+//                       absorb accumulation across many fills without overflow.
+#[account]
+pub struct Position {
+    pub owner: Pubkey,
+    pub base_amount_lots: i64,
+    pub quote_entry: i128,
+    pub bump: u8,
+}
+
+impl Position {
+    // discriminator + owner + base + quote + bump
+    pub const SIZE: usize = 8 + 32 + 8 + 16 + 1;
 }

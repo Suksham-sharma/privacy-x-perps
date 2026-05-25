@@ -11,6 +11,9 @@ build
 encrypted-ixs/src/main.rs
 artifacts/
 
+# Local progress log — not for the public repo.
+JOURNAL.md
+
 # Secrets (NEVER commit)
 .env
 .env.local
