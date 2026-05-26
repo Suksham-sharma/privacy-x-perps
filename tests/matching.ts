@@ -478,19 +478,160 @@ describe("perp engine e2e", () => {
       expect(buffer.isProcessing).to.equal(false);
       expect(buffer.batchId.toString()).to.equal("1");
 
-      // Margin stays locked on match (no partial-fill refund in v0).
-      const aliceUc = await program.account.userCollateral.fetch(
+      // Margin stays locked on match (no partial-fill refund in v0) and
+      // is mirrored onto the Position so close_position knows what to
+      // release.
+      expect(alicePos.marginLocked.toString()).to.equal(
+        (50n * ONE_USDC).toString(),
+      );
+      expect(bobPos.marginLocked.toString()).to.equal(
+        (50n * ONE_USDC).toString(),
+      );
+
+      const aliceUcAfterMatch = await program.account.userCollateral.fetch(
         setups[0].collateral,
       );
-      expect(aliceUc.balance.toString()).to.equal(
+      expect(aliceUcAfterMatch.balance.toString()).to.equal(
         (200n * ONE_USDC - 50n * ONE_USDC).toString(),
       );
-      const bobUc = await program.account.userCollateral.fetch(
+      const bobUcAfterMatch = await program.account.userCollateral.fetch(
         setups[1].collateral,
       );
-      expect(bobUc.balance.toString()).to.equal(
+      expect(bobUcAfterMatch.balance.toString()).to.equal(
         (200n * ONE_USDC - 50n * ONE_USDC).toString(),
       );
+
+      // ----- close both positions at +10% from entry -----
+      // alice (long 1000 @ 100k) exit 110k:
+      //   pnl = 1000 * 110_000 + (-100_000_000) = +10_000_000  (+10 USDC)
+      //   credit = 50_000_000 + 10_000_000 = 60_000_000
+      //   balance: 150 -> 210 USDC
+      // bob (short 1000 @ 100k) exit 110k:
+      //   pnl = -1000 * 110_000 + 100_000_000 = -10_000_000  (-10 USDC)
+      //   credit = 50_000_000 - 10_000_000 = 40_000_000
+      //   balance: 150 -> 190 USDC
+      const EXIT_PRICE = new anchor.BN(110_000);
+
+      const aliceClosedPromise = awaitEvent("positionClosedEvent");
+      await program.methods
+        .closePosition(EXIT_PRICE)
+        .accounts({
+          user: alice.publicKey,
+          market: marketPda,
+          position: setups[0].position,
+          userCollateral: setups[0].collateral,
+        })
+        .signers([alice])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+      const aliceClosed = await aliceClosedPromise;
+      expect(aliceClosed.owner.toBase58()).to.equal(alice.publicKey.toBase58());
+      expect(aliceClosed.realizedPnl.toString()).to.equal("10000000");
+      expect(aliceClosed.credit.toString()).to.equal("60000000");
+
+      const bobClosedPromise = awaitEvent("positionClosedEvent");
+      await program.methods
+        .closePosition(EXIT_PRICE)
+        .accounts({
+          user: bob.publicKey,
+          market: marketPda,
+          position: setups[1].position,
+          userCollateral: setups[1].collateral,
+        })
+        .signers([bob])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+      const bobClosed = await bobClosedPromise;
+      expect(bobClosed.realizedPnl.toString()).to.equal("-10000000");
+      expect(bobClosed.credit.toString()).to.equal("40000000");
+
+      const aliceFinalUc = await program.account.userCollateral.fetch(
+        setups[0].collateral,
+      );
+      expect(aliceFinalUc.balance.toString()).to.equal(
+        (210n * ONE_USDC).toString(),
+      );
+      const bobFinalUc = await program.account.userCollateral.fetch(
+        setups[1].collateral,
+      );
+      expect(bobFinalUc.balance.toString()).to.equal(
+        (190n * ONE_USDC).toString(),
+      );
+
+      // Positions zeroed (account stays, fields cleared).
+      const alicePosClosed = await program.account.position.fetch(setups[0].position);
+      expect(alicePosClosed.baseAmountLots.toString()).to.equal("0");
+      expect(alicePosClosed.quoteEntry.toString()).to.equal("0");
+      expect(alicePosClosed.marginLocked.toString()).to.equal("0");
+      const bobPosClosed = await program.account.position.fetch(setups[1].position);
+      expect(bobPosClosed.baseAmountLots.toString()).to.equal("0");
+      expect(bobPosClosed.quoteEntry.toString()).to.equal("0");
+      expect(bobPosClosed.marginLocked.toString()).to.equal("0");
+    });
+
+    it("rejects close_position when there is no open position", async () => {
+      // Fresh user with collateral but no position — close should fail
+      // with NoOpenPosition.
+      const stranger = Keypair.generate();
+      const sig = await provider.connection.requestAirdrop(stranger.publicKey, 1e9);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        admin,
+        usdcMint,
+        stranger.publicKey,
+      );
+      await mintTo(
+        provider.connection,
+        admin,
+        usdcMint,
+        ata.address,
+        admin,
+        Number(50n * ONE_USDC),
+      );
+      const [collateral] = deriveUserCollateralPda(
+        marketPda,
+        stranger.publicKey,
+        program.programId,
+      );
+      await program.methods
+        .deposit(new anchor.BN(Number(50n * ONE_USDC)))
+        .accounts({
+          user: stranger.publicKey,
+          market: marketPda,
+          userCollateral: collateral,
+          usdcVault: vaultAta,
+          userTokenAccount: ata.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([stranger])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      // No Position PDA exists for stranger. The seeds constraint will fail
+      // at account validation; surfaces as a generic account error, not
+      // NoOpenPosition. That's fine — point is the close is rejected.
+      const [position] = derivePositionPda(
+        marketPda,
+        stranger.publicKey,
+        program.programId,
+      );
+
+      let failed = false;
+      try {
+        await program.methods
+          .closePosition(new anchor.BN(100_000))
+          .accounts({
+            user: stranger.publicKey,
+            market: marketPda,
+            position,
+            userCollateral: collateral,
+          })
+          .signers([stranger])
+          .rpc({ commitment: "confirmed" });
+      } catch (err: any) {
+        failed = true;
+      }
+      expect(failed).to.equal(true);
     });
   });
 

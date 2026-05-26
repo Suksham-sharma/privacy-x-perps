@@ -98,4 +98,8 @@ pub mod confidential_perps {
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
         withdraw::withdraw_handler(ctx, amount)
     }
+
+    pub fn close_position(ctx: Context<ClosePosition>, exit_price: u64) -> Result<()> {
+        close_position::close_position_handler(ctx, exit_price)
+    }
 }

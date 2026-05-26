@@ -94,25 +94,34 @@ impl UserCollateral {
 // in v0 — see docs/circuit-v0.md "v0 vs v0.2". Encrypted commitment variant
 // is task #21 / v0.2.
 //
-// Units:
+// Units (v0):
 //   base_amount_lots — signed lots of base (SOL). + long, - short.
-//                       lots, not raw base; LOT_SIZE conversion happens at
-//                       close-time PnL settlement.
 //   quote_entry     — signed cumulative cost basis in lot-ticks
-//                       (sum over fills of ±fill_size_lots * clearing_price_ticks).
-//                       Negative when long (you paid quote), positive when short
-//                       (you received quote). Stored raw — TICK_SIZE * LOT_SIZE
-//                       USDC base-unit conversion deferred to close. i128 to
-//                       absorb accumulation across many fills without overflow.
+//                      (sum over fills of ±fill_size_lots * clearing_price_ticks).
+//                      Negative when long (you paid quote), positive when short
+//                      (you received quote). i128 absorbs accumulation across
+//                      many fills without overflow.
+//   margin_locked   — sum of max_margin from every order that has filled into
+//                      this position, in USDC base units. Released back to
+//                      UserCollateral at close. v0 doesn't refund partial-fill
+//                      excess at fill time (would leak order size), so this
+//                      is always the *committed* margin, not the
+//                      *required* margin.
+//
+// Unit convention (v0): lot-ticks treated 1:1 with USDC base units. Position
+// PnL = base_amount_lots * exit_price + quote_entry is therefore directly
+// comparable to margin_locked (both u64-scale-equivalent). Real
+// TICK_SIZE/LOT_SIZE calibration is post-v0.
 #[account]
 pub struct Position {
     pub owner: Pubkey,
     pub base_amount_lots: i64,
     pub quote_entry: i128,
+    pub margin_locked: u64,
     pub bump: u8,
 }
 
 impl Position {
-    // discriminator + owner + base + quote + bump
-    pub const SIZE: usize = 8 + 32 + 8 + 16 + 1;
+    // discriminator + owner + base + quote + margin + bump
+    pub const SIZE: usize = 8 + 32 + 8 + 16 + 8 + 1;
 }

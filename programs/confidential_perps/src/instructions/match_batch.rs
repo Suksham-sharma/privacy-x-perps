@@ -206,8 +206,22 @@ pub fn match_batch_callback_handler(
         )?;
         emit!(NoMatchEvent { batch_id });
     } else {
-        apply_fill(&mut ctx.accounts.position_a, fill_a_size, fill_a_side, clearing_price)?;
-        apply_fill(&mut ctx.accounts.position_b, fill_b_size, fill_b_side, clearing_price)?;
+        // Position.owner + bump are already stamped by submit_order (lazy
+        // init there); the callback just accumulates fills.
+        apply_fill(
+            &mut ctx.accounts.position_a,
+            fill_a_size,
+            fill_a_side,
+            clearing_price,
+            max_margin_a,
+        )?;
+        apply_fill(
+            &mut ctx.accounts.position_b,
+            fill_b_size,
+            fill_b_side,
+            clearing_price,
+            max_margin_b,
+        )?;
 
         emit!(BatchSettledEvent {
             batch_id,
@@ -265,7 +279,15 @@ fn credit_refund(
 // Apply a single fill to a Position. Long (side=0) adds base + pays quote;
 // short (side=1) subtracts base + receives quote. Both deltas widen to i128
 // before the checked op so a max-size fill at max price can't trip overflow.
-fn apply_fill(pos: &mut Position, fill_size: u64, side: u8, clearing_price: u64) -> Result<()> {
+// Also accumulates max_margin into position.margin_locked — that's the pool
+// close_position releases back at exit, alongside realized PnL.
+fn apply_fill(
+    pos: &mut Position,
+    fill_size: u64,
+    side: u8,
+    clearing_price: u64,
+    max_margin: u64,
+) -> Result<()> {
     if fill_size == 0 {
         return Ok(());
     }
@@ -290,6 +312,11 @@ fn apply_fill(pos: &mut Position, fill_size: u64, side: u8, clearing_price: u64)
     pos.quote_entry = pos
         .quote_entry
         .checked_add(delta_quote)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    pos.margin_locked = pos
+        .margin_locked
+        .checked_add(max_margin)
         .ok_or(ErrorCode::MathOverflow)?;
 
     Ok(())

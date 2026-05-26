@@ -1,4 +1,5 @@
 pub mod add_together;
+pub mod close_position;
 pub mod deposit;
 pub mod init_market;
 pub mod match_batch;
@@ -7,6 +8,7 @@ pub mod submit_order;
 pub mod withdraw;
 
 pub use add_together::*;
+pub use close_position::*;
 pub use deposit::*;
 pub use init_market::*;
 pub use match_batch::*;

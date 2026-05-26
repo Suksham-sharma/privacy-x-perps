@@ -24,6 +24,10 @@ pub enum ErrorCode {
     BatchNotReady,
     #[msg("Batch is already being processed (computation in flight)")]
     BatchAlreadyProcessing,
+    #[msg("No open position to close")]
+    NoOpenPosition,
+    #[msg("Position is underwater; cannot self-close (liquidation required)")]
+    PositionUnderwater,
     #[msg("Market is already initialized")]
     MarketAlreadyInitialized,
     #[msg("Invalid Pyth feed")]
