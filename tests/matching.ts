@@ -10,7 +10,23 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
-import { getMXEPublicKey } from "@arcium-hq/client";
+import {
+  awaitComputationFinalization,
+  getArciumAccountBaseSeed,
+  getArciumEnv,
+  getArciumProgram,
+  getArciumProgramId,
+  getClusterAccAddress,
+  getCompDefAccAddress,
+  getCompDefAccOffset,
+  getComputationAccAddress,
+  getExecutingPoolAccAddress,
+  getLookupTableAddress,
+  getMempoolAccAddress,
+  getMXEAccAddress,
+  getMXEPublicKey,
+  uploadCircuit,
+} from "@arcium-hq/client";
 import {
   deriveMarketPda,
   deriveBatchBufferPda,
@@ -22,6 +38,8 @@ import {
   type OrderPlaintext,
 } from "@confidential-perps/sdk";
 import { expect } from "chai";
+import * as fs from "fs";
+import { randomBytes } from "crypto";
 import { ConfidentialPerps } from "../target/types/confidential_perps";
 
 const USDC_DECIMALS = 6;
@@ -48,6 +66,24 @@ describe("perp engine e2e", () => {
   const program = anchor.workspace.ConfidentialPerps as Program<ConfidentialPerps>;
   const provider = anchor.getProvider() as anchor.AnchorProvider;
   const admin = (provider.wallet as anchor.Wallet).payer;
+
+  // Arcium localnet handles for the e2e flow.
+  const arciumProgram = getArciumProgram(provider);
+  const arciumEnv = getArciumEnv();
+  const clusterAccount = getClusterAccAddress(arciumEnv.arciumClusterOffset);
+
+  // Event-listener helper. Mirrors the pattern in tests/confidential_perps.ts.
+  type Event = anchor.IdlEvents<(typeof program)["idl"]>;
+  const awaitEvent = async <E extends keyof Event>(
+    eventName: E,
+  ): Promise<Event[E]> => {
+    let listenerId: number;
+    const event = await new Promise<Event[E]>((res) => {
+      listenerId = program.addEventListener(eventName, (e) => res(e));
+    });
+    await program.removeEventListener(listenerId);
+    return event;
+  };
 
   const pythFeed = Keypair.generate().publicKey;
 
@@ -96,123 +132,58 @@ describe("perp engine e2e", () => {
 
       const buffer = await program.account.batchBuffer.fetch(batchBufferPda);
       expect(buffer.nOrders).to.equal(0);
+      expect(buffer.isProcessing).to.equal(false);
+    });
+
+    it("initializes the match_batch comp def and uploads the compiled circuit", async () => {
+      // Same pattern as initAddTogetherCompDef in tests/confidential_perps.ts.
+      const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
+      const offset = getCompDefAccOffset("match_batch");
+      const compDefPda = PublicKey.findProgramAddressSync(
+        [baseSeed, program.programId.toBuffer(), offset],
+        getArciumProgramId(),
+      )[0];
+
+      const mxeAccount = getMXEAccAddress(program.programId);
+      const mxeAcc = await arciumProgram.account.mxeAccount.fetch(mxeAccount);
+      const lutAddress = getLookupTableAddress(
+        program.programId,
+        mxeAcc.lutOffsetSlot,
+      );
+
+      await program.methods
+        .initMatchBatchCompDef()
+        .accounts({
+          payer: admin.publicKey,
+          mxeAccount,
+          compDefAccount: compDefPda,
+          addressLookupTable: lutAddress,
+        })
+        .signers([admin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      const rawCircuit = fs.readFileSync("build/match_batch.arcis");
+      await uploadCircuit(
+        provider,
+        "match_batch",
+        program.programId,
+        rawCircuit,
+        true,
+        500,
+        {
+          skipPreflight: true,
+          preflightCommitment: "confirmed",
+          commitment: "confirmed",
+        },
+      );
     });
   });
 
-  describe("submit_order with real SDK encryption", () => {
-    // Per-order margin lock. With ONE_USDC = 10^6 USDC base units, 50 USDC
-    // is well under what any user deposits below — every order is funded.
+  describe("submit_order edge cases", () => {
+    // Per-order margin lock. The full happy-path SDK-encrypted submit flow
+    // is exercised inside the e2e block below (which also drives the
+    // callback). This block keeps the negative + SDK round-trip cases.
     const PER_ORDER_MARGIN = new anchor.BN(Number(50n * ONE_USDC));
-
-    it("encrypts 3 orders via the SDK and stores their ciphertexts on-chain", async () => {
-      const users = [Keypair.generate(), Keypair.generate(), Keypair.generate()];
-      for (const u of users) {
-        const sig = await provider.connection.requestAirdrop(u.publicKey, 1e9);
-        await provider.connection.confirmTransaction(sig, "confirmed");
-      }
-
-      // Fund each user's UserCollateral so submit_order's margin lock has
-      // something to debit. Mint USDC -> ATA -> deposit -> PDA.
-      const collateralPdas: PublicKey[] = [];
-      for (const u of users) {
-        const ata = await getOrCreateAssociatedTokenAccount(
-          provider.connection,
-          admin,
-          usdcMint,
-          u.publicKey,
-        );
-        await mintTo(
-          provider.connection,
-          admin,
-          usdcMint,
-          ata.address,
-          admin,
-          Number(200n * ONE_USDC),
-        );
-        const [collateralPda] = deriveUserCollateralPda(
-          marketPda,
-          u.publicKey,
-          program.programId,
-        );
-        collateralPdas.push(collateralPda);
-        await program.methods
-          .deposit(new anchor.BN(Number(200n * ONE_USDC)))
-          .accounts({
-            user: u.publicKey,
-            market: marketPda,
-            userCollateral: collateralPda,
-            usdcVault: vaultAta,
-            userTokenAccount: ata.address,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([u])
-          .rpc({ skipPreflight: true, commitment: "confirmed" });
-      }
-
-      // Three distinct plaintext orders. SDK does the encryption.
-      const plaintexts: OrderPlaintext[] = [
-        { side: 0n, price: 100_000n, size: 1_000n, clientNonce: 1n },  // long
-        { side: 1n, price: 101_000n, size: 2_000n, clientNonce: 2n },  // short
-        { side: 0n, price: 99_500n,  size: 500n,   clientNonce: 3n },  // long
-      ];
-      const encrypted = plaintexts.map((p) => encryptOrder(p, mxePublicKey));
-      const argsList = encrypted.map(toSubmitOrderArgs);
-
-      for (let i = 0; i < users.length; i++) {
-        const a = argsList[i];
-        const [positionPda] = derivePositionPda(
-          marketPda,
-          users[i].publicKey,
-          program.programId,
-        );
-        await program.methods
-          .submitOrder(
-            a.x25519Pubkey,
-            a.nonce,
-            PER_ORDER_MARGIN,
-            a.ctSide,
-            a.ctPrice,
-            a.ctSize,
-            a.ctClientNonce,
-          )
-          .accounts({
-            user: users[i].publicKey,
-            market: marketPda,
-            batchBuffer: batchBufferPda,
-            userCollateral: collateralPdas[i],
-            position: positionPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .signers([users[i]])
-          .rpc({ skipPreflight: true, commitment: "confirmed" });
-      }
-
-      const buffer = await program.account.batchBuffer.fetch(batchBufferPda);
-      expect(buffer.nOrders).to.equal(3);
-
-      // The on-chain ciphertexts must match what the SDK produced.
-      // Each slot also records the public max_margin that was locked.
-      for (let i = 0; i < 3; i++) {
-        expect(buffer.orders[i].owner.toBase58()).to.equal(
-          users[i].publicKey.toBase58(),
-        );
-        expect(Buffer.from(buffer.orders[i].ctPrice)).to.deep.equal(
-          Buffer.from(encrypted[i].ctPrice),
-        );
-        expect(buffer.orders[i].maxMargin.toString()).to.equal(
-          PER_ORDER_MARGIN.toString(),
-        );
-      }
-
-      // UserCollateral balance was debited by exactly the margin per order.
-      for (let i = 0; i < users.length; i++) {
-        const uc = await program.account.userCollateral.fetch(collateralPdas[i]);
-        expect(uc.balance.toString()).to.equal(
-          (200n * ONE_USDC - 50n * ONE_USDC).toString(),
-        );
-      }
-    });
 
     it("rejects an order whose max_margin exceeds the user's collateral", async () => {
       const poor = Keypair.generate();
@@ -329,6 +300,197 @@ describe("perp engine e2e", () => {
         mxePublicKey,
       );
       expect(decryptedSide).to.equal(plaintext.side);
+    });
+  });
+
+  describe("process_batch + callback (full lifecycle)", () => {
+    // The e2e test. Two users deposit, submit crossing orders, the batch
+    // window closes, anyone calls process_batch, MPC runs, callback applies
+    // fills to both Positions and resets the buffer.
+    const PER_ORDER_MARGIN = new anchor.BN(Number(50n * ONE_USDC));
+    const DEPOSIT_AMOUNT = new anchor.BN(Number(200n * ONE_USDC));
+
+    it("crosses 2 orders -> callback applies fills to both Positions", async () => {
+      const alice = Keypair.generate();
+      const bob = Keypair.generate();
+
+      // Fund SOL + USDC + deposit collateral for both.
+      const setups: Array<{
+        kp: Keypair;
+        collateral: PublicKey;
+        position: PublicKey;
+      }> = [];
+      for (const u of [alice, bob]) {
+        const sig = await provider.connection.requestAirdrop(u.publicKey, 2e9);
+        await provider.connection.confirmTransaction(sig, "confirmed");
+
+        const ata = await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          admin,
+          usdcMint,
+          u.publicKey,
+        );
+        await mintTo(
+          provider.connection,
+          admin,
+          usdcMint,
+          ata.address,
+          admin,
+          Number(200n * ONE_USDC),
+        );
+        const [collateral] = deriveUserCollateralPda(
+          marketPda,
+          u.publicKey,
+          program.programId,
+        );
+        const [position] = derivePositionPda(
+          marketPda,
+          u.publicKey,
+          program.programId,
+        );
+        await program.methods
+          .deposit(DEPOSIT_AMOUNT)
+          .accounts({
+            user: u.publicKey,
+            market: marketPda,
+            userCollateral: collateral,
+            usdcVault: vaultAta,
+            userTokenAccount: ata.address,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([u])
+          .rpc({ skipPreflight: true, commitment: "confirmed" });
+        setups.push({ kp: u, collateral, position });
+      }
+
+      // Crossing orders at the same price -> match at the midpoint (also
+      // 100_000) -> fill_size = min(1000, 1000) = 1000. Oracle band ±5%
+      // is satisfied for oracle = 100_000.
+      const orderA: OrderPlaintext = {
+        side: 0n,
+        price: 100_000n,
+        size: 1_000n,
+        clientNonce: 11n,
+      };
+      const orderB: OrderPlaintext = {
+        side: 1n,
+        price: 100_000n,
+        size: 1_000n,
+        clientNonce: 22n,
+      };
+      const encA = encryptOrder(orderA, mxePublicKey);
+      const encB = encryptOrder(orderB, mxePublicKey);
+      const argsA = toSubmitOrderArgs(encA);
+      const argsB = toSubmitOrderArgs(encB);
+
+      for (const [args, s] of [
+        [argsA, setups[0]],
+        [argsB, setups[1]],
+      ] as const) {
+        await program.methods
+          .submitOrder(
+            args.x25519Pubkey,
+            args.nonce,
+            PER_ORDER_MARGIN,
+            args.ctSide,
+            args.ctPrice,
+            args.ctSize,
+            args.ctClientNonce,
+          )
+          .accounts({
+            user: s.kp.publicKey,
+            market: marketPda,
+            batchBuffer: batchBufferPda,
+            userCollateral: s.collateral,
+            position: s.position,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([s.kp])
+          .rpc({ skipPreflight: true, commitment: "confirmed" });
+      }
+
+      // Wait for the batch window (5 slots @ 400ms ≈ 2s) to close.
+      await new Promise((r) => setTimeout(r, 3_000));
+
+      // Queue match_batch via process_batch. accountsPartial so we only
+      // pin the Arcium-side accounts; Anchor infers the rest.
+      const computationOffset = new anchor.BN(randomBytes(8), "hex");
+      const compDefOffset = Buffer.from(
+        getCompDefAccOffset("match_batch"),
+      ).readUInt32LE();
+
+      const settledPromise = awaitEvent("batchSettledEvent");
+
+      await program.methods
+        .processBatch(computationOffset, new anchor.BN(100_000))
+        .accountsPartial({
+          payer: admin.publicKey,
+          mxeAccount: getMXEAccAddress(program.programId),
+          mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
+          executingPool: getExecutingPoolAccAddress(
+            arciumEnv.arciumClusterOffset,
+          ),
+          computationAccount: getComputationAccAddress(
+            arciumEnv.arciumClusterOffset,
+            computationOffset,
+          ),
+          compDefAccount: getCompDefAccAddress(
+            program.programId,
+            compDefOffset,
+          ),
+          clusterAccount,
+          market: marketPda,
+          batchBuffer: batchBufferPda,
+        })
+        .signers([admin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      // Wait for MPC + callback to finalize.
+      await awaitComputationFinalization(
+        provider,
+        computationOffset,
+        program.programId,
+        "confirmed",
+      );
+
+      const settled = await settledPromise;
+      expect(settled.clearingPrice.toString()).to.equal("100000");
+      expect(settled.totalVolume.toString()).to.equal("1000");
+      expect(settled.ownerA.toBase58()).to.equal(alice.publicKey.toBase58());
+      expect(settled.ownerB.toBase58()).to.equal(bob.publicKey.toBase58());
+
+      // Positions: alice long 1000 lots @ 100k -> base +1000, quote -1000*100k.
+      //            bob short 1000 lots @ 100k  -> base -1000, quote +1000*100k.
+      const alicePos = await program.account.position.fetch(setups[0].position);
+      expect(alicePos.owner.toBase58()).to.equal(alice.publicKey.toBase58());
+      expect(alicePos.baseAmountLots.toString()).to.equal("1000");
+      expect(alicePos.quoteEntry.toString()).to.equal("-100000000");
+
+      const bobPos = await program.account.position.fetch(setups[1].position);
+      expect(bobPos.owner.toBase58()).to.equal(bob.publicKey.toBase58());
+      expect(bobPos.baseAmountLots.toString()).to.equal("-1000");
+      expect(bobPos.quoteEntry.toString()).to.equal("100000000");
+
+      // Buffer reset; batch_id bumped; is_processing cleared.
+      const buffer = await program.account.batchBuffer.fetch(batchBufferPda);
+      expect(buffer.nOrders).to.equal(0);
+      expect(buffer.isProcessing).to.equal(false);
+      expect(buffer.batchId.toString()).to.equal("1");
+
+      // Margin stays locked on match (no partial-fill refund in v0).
+      const aliceUc = await program.account.userCollateral.fetch(
+        setups[0].collateral,
+      );
+      expect(aliceUc.balance.toString()).to.equal(
+        (200n * ONE_USDC - 50n * ONE_USDC).toString(),
+      );
+      const bobUc = await program.account.userCollateral.fetch(
+        setups[1].collateral,
+      );
+      expect(bobUc.balance.toString()).to.equal(
+        (200n * ONE_USDC - 50n * ONE_USDC).toString(),
+      );
     });
   });
 

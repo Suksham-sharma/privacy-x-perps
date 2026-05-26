@@ -71,6 +71,7 @@ pub fn submit_order_handler(
         pos.bump = ctx.bumps.position;
     }
 
+    require!(!buf.is_processing, ErrorCode::BatchAlreadyProcessing);
     require!((buf.n_orders as usize) < MAX_ORDERS, ErrorCode::BatchFull);
 
     // Lock margin first — fail closed before mutating the batch buffer.

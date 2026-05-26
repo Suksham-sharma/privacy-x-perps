@@ -223,6 +223,7 @@ pub fn match_batch_callback_handler(
     buf.opened_at_slot = 0;
     buf.orders = [EncryptedOrderSlot::default(); crate::constants::MAX_ORDERS];
     buf.batch_id = batch_id.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+    buf.is_processing = false;
 
     Ok(())
 }

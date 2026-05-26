@@ -73,6 +73,14 @@ pub mod confidential_perps {
         match_batch::init_match_batch_comp_def_handler(ctx)
     }
 
+    pub fn process_batch(
+        ctx: Context<ProcessBatch>,
+        computation_offset: u64,
+        oracle_price: u64,
+    ) -> Result<()> {
+        process_batch::process_batch_handler(ctx, computation_offset, oracle_price)
+    }
+
     #[arcium_callback(encrypted_ix = "match_batch")]
     pub fn match_batch_callback(
         ctx: Context<MatchBatchCallback>,

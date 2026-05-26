@@ -49,7 +49,16 @@ impl EncryptedOrderSlot {
     pub const SIZE: usize = 32 + 32 + 16 + 8 + 32 + 32 + 32 + 32;
 }
 
-// Rolling buffer. Reused across batches: process_batch resets n_orders and bumps batch_id.
+// Rolling buffer. Reused across batches: process_batch flips is_processing,
+// callback resets n_orders + orders[] and bumps batch_id.
+//
+// is_processing semantics:
+//   false at init and after each callback;
+//   true between process_batch (queue_computation) and the callback firing.
+// While true: submit_order rejects new orders, and process_batch refuses to
+// re-queue (no double-spend of the same encrypted orders). v0 caveat: if
+// Arcium drops the computation the buffer is stuck until manual recovery;
+// timeout / cancel flow is v0.2 work.
 #[account]
 pub struct BatchBuffer {
     pub market: Pubkey,
@@ -58,10 +67,14 @@ pub struct BatchBuffer {
     pub opened_at_slot: u64,
     pub orders: [EncryptedOrderSlot; MAX_ORDERS],
     pub bump: u8,
+    pub is_processing: bool,
 }
 
 impl BatchBuffer {
-    pub const SIZE: usize = 8 + 32 + 8 + 1 + 8 + (MAX_ORDERS * EncryptedOrderSlot::SIZE) + 1;
+    // discriminator + market + batch_id + n_orders + opened_at_slot
+    //   + orders[] + bump + is_processing
+    pub const SIZE: usize =
+        8 + 32 + 8 + 1 + 8 + (MAX_ORDERS * EncryptedOrderSlot::SIZE) + 1 + 1;
 }
 
 // Per-user collateral balance (USDC base units, held in Market.usdc_vault).

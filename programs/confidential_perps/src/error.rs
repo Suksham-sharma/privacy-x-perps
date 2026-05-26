@@ -20,6 +20,10 @@ pub enum ErrorCode {
     BatchWindowOpen,
     #[msg("Batch is empty")]
     BatchEmpty,
+    #[msg("Batch is not ready to process (v0 requires exactly 2 orders)")]
+    BatchNotReady,
+    #[msg("Batch is already being processed (computation in flight)")]
+    BatchAlreadyProcessing,
     #[msg("Market is already initialized")]
     MarketAlreadyInitialized,
     #[msg("Invalid Pyth feed")]
