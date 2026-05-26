@@ -28,6 +28,10 @@ pub enum ErrorCode {
     NoOpenPosition,
     #[msg("Position is underwater; cannot self-close (liquidation required)")]
     PositionUnderwater,
+    #[msg("Position is healthy; not eligible for liquidation")]
+    PositionNotLiquidatable,
+    #[msg("Cannot liquidate your own position")]
+    SelfLiquidationNotAllowed,
     #[msg("Market is already initialized")]
     MarketAlreadyInitialized,
     #[msg("Invalid Pyth feed")]

@@ -567,6 +567,226 @@ describe("perp engine e2e", () => {
       expect(bobPosClosed.marginLocked.toString()).to.equal("0");
     });
 
+    it("liquidates an underwater position; rejects healthy + self-liq", async () => {
+      // Fresh users carol + dave. Match crossing orders at 100_000, then
+      // liquidate carol at 70_000 where her long is 30% underwater:
+      //   carol: base +1000, quote_entry -100_000_000, margin_locked 50_000_000.
+      //   exit  = 70_000.
+      //   pnl   = 1000 * 70_000 + (-100_000_000) = -30_000_000.
+      //   credit = 50_000_000 + (-30_000_000) = 20_000_000.
+      //   maintenance = 50_000_000 / 2 = 25_000_000.
+      //   credit (20m) < maintenance (25m) -> liquidatable.
+      //   credit_returned to carol = 20_000_000.
+      const carol = Keypair.generate();
+      const dave = Keypair.generate();
+
+      const setups: Array<{
+        kp: Keypair;
+        collateral: PublicKey;
+        position: PublicKey;
+      }> = [];
+      for (const u of [carol, dave]) {
+        const sig = await provider.connection.requestAirdrop(u.publicKey, 2e9);
+        await provider.connection.confirmTransaction(sig, "confirmed");
+        const ata = await getOrCreateAssociatedTokenAccount(
+          provider.connection,
+          admin,
+          usdcMint,
+          u.publicKey,
+        );
+        await mintTo(
+          provider.connection,
+          admin,
+          usdcMint,
+          ata.address,
+          admin,
+          Number(200n * ONE_USDC),
+        );
+        const [collateral] = deriveUserCollateralPda(
+          marketPda,
+          u.publicKey,
+          program.programId,
+        );
+        const [position] = derivePositionPda(
+          marketPda,
+          u.publicKey,
+          program.programId,
+        );
+        await program.methods
+          .deposit(DEPOSIT_AMOUNT)
+          .accounts({
+            user: u.publicKey,
+            market: marketPda,
+            userCollateral: collateral,
+            usdcVault: vaultAta,
+            userTokenAccount: ata.address,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([u])
+          .rpc({ skipPreflight: true, commitment: "confirmed" });
+        setups.push({ kp: u, collateral, position });
+      }
+
+      const carolOrder: OrderPlaintext = {
+        side: 0n,
+        price: 100_000n,
+        size: 1_000n,
+        clientNonce: 33n,
+      };
+      const daveOrder: OrderPlaintext = {
+        side: 1n,
+        price: 100_000n,
+        size: 1_000n,
+        clientNonce: 44n,
+      };
+      const argsC = toSubmitOrderArgs(encryptOrder(carolOrder, mxePublicKey));
+      const argsD = toSubmitOrderArgs(encryptOrder(daveOrder, mxePublicKey));
+
+      for (const [args, s] of [
+        [argsC, setups[0]],
+        [argsD, setups[1]],
+      ] as const) {
+        await program.methods
+          .submitOrder(
+            args.x25519Pubkey,
+            args.nonce,
+            PER_ORDER_MARGIN,
+            args.ctSide,
+            args.ctPrice,
+            args.ctSize,
+            args.ctClientNonce,
+          )
+          .accounts({
+            user: s.kp.publicKey,
+            market: marketPda,
+            batchBuffer: batchBufferPda,
+            userCollateral: s.collateral,
+            position: s.position,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([s.kp])
+          .rpc({ skipPreflight: true, commitment: "confirmed" });
+      }
+
+      await new Promise((r) => setTimeout(r, 3_000));
+
+      const computationOffset = new anchor.BN(randomBytes(8), "hex");
+      const compDefOffset = Buffer.from(
+        getCompDefAccOffset("match_batch"),
+      ).readUInt32LE();
+      await program.methods
+        .processBatch(computationOffset, new anchor.BN(100_000))
+        .accountsPartial({
+          payer: admin.publicKey,
+          mxeAccount: getMXEAccAddress(program.programId),
+          mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
+          executingPool: getExecutingPoolAccAddress(
+            arciumEnv.arciumClusterOffset,
+          ),
+          computationAccount: getComputationAccAddress(
+            arciumEnv.arciumClusterOffset,
+            computationOffset,
+          ),
+          compDefAccount: getCompDefAccAddress(
+            program.programId,
+            compDefOffset,
+          ),
+          clusterAccount,
+          market: marketPda,
+          batchBuffer: batchBufferPda,
+        })
+        .signers([admin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+      await awaitComputationFinalization(
+        provider,
+        computationOffset,
+        program.programId,
+        "confirmed",
+      );
+
+      // Carol's position is now set; verify before any liquidation attempts.
+      const carolPosBefore = await program.account.position.fetch(setups[0].position);
+      expect(carolPosBefore.baseAmountLots.toString()).to.equal("1000");
+      expect(carolPosBefore.marginLocked.toString()).to.equal(
+        (50n * ONE_USDC).toString(),
+      );
+
+      // ----- 1. healthy gate: liquidate at 100k (entry) -> rejected -----
+      let healthyRejected = false;
+      try {
+        await program.methods
+          .liquidatePosition(new anchor.BN(100_000))
+          .accounts({
+            liquidator: admin.publicKey,
+            market: marketPda,
+            position: setups[0].position,
+            userCollateral: setups[0].collateral,
+          })
+          .signers([admin])
+          .rpc({ commitment: "confirmed" });
+      } catch (err: any) {
+        healthyRejected = true;
+        const msg = String(err?.message ?? err);
+        expect(msg).to.match(/PositionNotLiquidatable|0x[0-9a-f]+/i);
+      }
+      expect(healthyRejected).to.equal(true);
+
+      // ----- 2. self-liq gate: carol tries to liquidate herself -----
+      let selfRejected = false;
+      try {
+        await program.methods
+          .liquidatePosition(new anchor.BN(70_000))
+          .accounts({
+            liquidator: carol.publicKey,
+            market: marketPda,
+            position: setups[0].position,
+            userCollateral: setups[0].collateral,
+          })
+          .signers([carol])
+          .rpc({ commitment: "confirmed" });
+      } catch (err: any) {
+        selfRejected = true;
+        const msg = String(err?.message ?? err);
+        expect(msg).to.match(/SelfLiquidationNotAllowed|0x[0-9a-f]+/i);
+      }
+      expect(selfRejected).to.equal(true);
+
+      // Position untouched after both failures.
+      const carolPosMid = await program.account.position.fetch(setups[0].position);
+      expect(carolPosMid.baseAmountLots.toString()).to.equal("1000");
+
+      // ----- 3. positive: admin liquidates carol at 70_000 -----
+      const liqPromise = awaitEvent("positionLiquidatedEvent");
+      await program.methods
+        .liquidatePosition(new anchor.BN(70_000))
+        .accounts({
+          liquidator: admin.publicKey,
+          market: marketPda,
+          position: setups[0].position,
+          userCollateral: setups[0].collateral,
+        })
+        .signers([admin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      const liqEvent = await liqPromise;
+      expect(liqEvent.owner.toBase58()).to.equal(carol.publicKey.toBase58());
+      expect(liqEvent.liquidator.toBase58()).to.equal(admin.publicKey.toBase58());
+      expect(liqEvent.realizedPnl.toString()).to.equal("-30000000");
+      expect(liqEvent.creditReturned.toString()).to.equal("20000000");
+
+      const carolPosAfter = await program.account.position.fetch(setups[0].position);
+      expect(carolPosAfter.baseAmountLots.toString()).to.equal("0");
+      expect(carolPosAfter.quoteEntry.toString()).to.equal("0");
+      expect(carolPosAfter.marginLocked.toString()).to.equal("0");
+
+      const carolUcAfter = await program.account.userCollateral.fetch(setups[0].collateral);
+      // 150 USDC remaining post-deposit-and-margin-lock + 20 USDC credit_returned = 170.
+      expect(carolUcAfter.balance.toString()).to.equal(
+        (170n * ONE_USDC).toString(),
+      );
+    });
+
     it("rejects close_position when there is no open position", async () => {
       // Fresh user with collateral but no position — close should fail
       // with NoOpenPosition.

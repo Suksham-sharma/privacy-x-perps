@@ -102,4 +102,11 @@ pub mod confidential_perps {
     pub fn close_position(ctx: Context<ClosePosition>, exit_price: u64) -> Result<()> {
         close_position::close_position_handler(ctx, exit_price)
     }
+
+    pub fn liquidate_position(
+        ctx: Context<LiquidatePosition>,
+        exit_price: u64,
+    ) -> Result<()> {
+        liquidate_position::liquidate_position_handler(ctx, exit_price)
+    }
 }
