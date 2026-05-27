@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-confidential_perps = "4SRWjriSqi6h3ec7peAFkHFdELpHw84gKSXKs14Q9ErG"
+confidential_perps = "2vfSYJP69cyoVrpN2p91Cu4aZKMYbEesQtDJMu2LRNJ1"
 
 [provider]
 cluster = "localnet"
@@ -17,5 +17,23 @@ test = "pnpm exec ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
 
 [hooks]
 
+[test]
+# Generous startup_wait (was 5000) because [[test.validator.clone]] makes
+# the validator do a devnet RPC round-trip for the Pyth receiver program
+# on boot. 5s wasn't always enough; 20s gives slack on flaky networks.
+startup_wait = 20000
+shutdown_wait = 2000
+upgradeable = false
+
 [test.validator]
-startup_wait = 10000
+bind_address = "127.0.0.1"
+url = "https://api.devnet.solana.com"
+ledger = ".anchor/test-ledger"
+rpc_port = 8899
+
+[[test.validator.account]]
+address = "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE"
+filename = "tests/fixtures/pyth_sol_usd.json"
+
+[[test.validator.clone]]
+address = "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ"

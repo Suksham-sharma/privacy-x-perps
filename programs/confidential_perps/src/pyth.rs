@@ -103,7 +103,15 @@ pub fn read_pyth_price(
         ErrorCode::InvalidPythAccount
     );
 
-    let parsed = PriceUpdateV2::try_from_slice(&data[8..])
+    // Use the reader-style `deserialize` (not `try_from_slice`): real
+    // on-chain PriceUpdateV2 accounts are 134 bytes total (the Borsh enum
+    // tag for `Full` is 1 byte, but Pyth allocates space for the worst-case
+    // `Partial` variant, leaving 1 trailing zero). `try_from_slice` errors
+    // on trailing bytes; `deserialize` consumes just what each field needs.
+    // Same code path then works for both our 133-byte localnet fixture and
+    // a real cloned-from-devnet account.
+    let mut cursor = &data[8..];
+    let parsed = PriceUpdateV2::deserialize(&mut cursor)
         .map_err(|_| error!(ErrorCode::InvalidPythAccount))?;
 
     // 3. Reject partial verification. `get_price_no_older_than` in the

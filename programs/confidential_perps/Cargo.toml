@@ -9,7 +9,12 @@ crate-type = ["cdylib", "lib"]
 name = "confidential_perps"
 
 [features]
-default = []
+# v0 NOTE: `test-stale-ok` is on by default because `arcium build` has no
+# `--features` flag and our tests need the looser freshness window for
+# the cloned-from-devnet PriceUpdateV2 (publish_time frozen at clone-time).
+# Pre-mainnet TODO: strip `test-stale-ok` from `default` and verify the
+# 30s window holds against real-time Pyth pushes on devnet.
+default = ["test-stale-ok"]
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []

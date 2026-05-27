@@ -11,7 +11,7 @@ pub use instructions::*;
 #[allow(unused_imports)]
 pub use state::*;
 
-declare_id!("4SRWjriSqi6h3ec7peAFkHFdELpHw84gKSXKs14Q9ErG");
+declare_id!("2vfSYJP69cyoVrpN2p91Cu4aZKMYbEesQtDJMu2LRNJ1");
 
 #[arcium_program]
 pub mod confidential_perps {
