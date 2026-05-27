@@ -1,17 +1,23 @@
-// close_position — user-initiated exit. Computes realized PnL at the
-// caller-supplied exit_price, releases margin + PnL back to UserCollateral,
-// zeros the Position. v0 trusts the exit_price (Pyth wrapper is a later
-// task); v0 also refuses to settle underwater positions — those go through
-// the liquidation path (TBD).
+// close_position — user-initiated exit. Reads the current Pyth price and
+// uses it as the exit price; the user does NOT supply a price. Releases
+// margin + realized PnL back to UserCollateral and zeros the Position.
+//
+// Why no user-supplied exit_price (Codex review fix): the protocol has no
+// counterparty for the exit, so any caller-chosen exit inside a price band
+// is free optionality — a long picks the top of the band, a short picks
+// the bottom, a liquidator picks the worst value for the victim. Settling
+// at the oracle directly removes that surface entirely. Liquidate is the
+// same pattern (see liquidate_position.rs).
 //
 // PnL formula (v0, lot-ticks treated 1:1 with USDC base units — see the
 // Position doc comment in state/mod.rs):
-//   realized_pnl = base_amount_lots * exit_price + quote_entry
+//   realized_pnl = base_amount_lots * oracle_price + quote_entry
 //   credit       = margin_locked + realized_pnl
-// If credit < 0 the position cannot self-close.
+// If credit < 0 the position can't self-close — goes through liquidation.
 use crate::{
     constants::{MARKET_SEED, POSITION_SEED, USER_COLLATERAL_SEED},
     error::ErrorCode,
+    pyth::read_pyth_price,
     state::{Market, Position, UserCollateral},
 };
 use anchor_lang::prelude::*;
@@ -38,36 +44,40 @@ pub struct ClosePosition<'info> {
         constraint = user_collateral.owner == user.key(),
     )]
     pub user_collateral: Box<Account<'info, UserCollateral>>,
+
+    /// CHECK: validated as Pyth PriceUpdateV2 in read_pyth_price. See
+    /// the ProcessBatch doc comment for the same UncheckedAccount rationale.
+    pub price_update: UncheckedAccount<'info>,
 }
 
 #[event]
 pub struct PositionClosedEvent {
     pub owner: Pubkey,
-    pub exit_price: u64,
+    pub exit_price: u64,       // Pyth-sourced; in market's tick units
     pub base_amount_lots: i64, // base at close time (pre-zero)
     pub realized_pnl: i128,    // lot-ticks (~= USDC base units in v0)
     pub credit: u64,           // margin + pnl, what UserCollateral gained
 }
 
-pub fn close_position_handler(
-    ctx: Context<ClosePosition>,
-    exit_price: u64,
-) -> Result<()> {
-    require!(exit_price > 0, ErrorCode::ZeroAmount);
+pub fn close_position_handler(ctx: Context<ClosePosition>) -> Result<()> {
+    // Pyth-sourced exit price. Validates owner, freshness, feed_id, conf.
+    let exit_price = read_pyth_price(
+        &ctx.accounts.price_update.to_account_info(),
+        &ctx.accounts.market.pyth_feed_id,
+        &Clock::get()?,
+    )?;
 
     let pos = &mut ctx.accounts.position;
     let uc = &mut ctx.accounts.user_collateral;
 
     require!(pos.base_amount_lots != 0, ErrorCode::NoOpenPosition);
 
-    // realized_pnl = base * exit + quote_entry (signed, in lot-ticks).
     let pnl = (pos.base_amount_lots as i128)
         .checked_mul(exit_price as i128)
         .ok_or(ErrorCode::MathOverflow)?
         .checked_add(pos.quote_entry)
         .ok_or(ErrorCode::MathOverflow)?;
 
-    // Total credit = margin_locked + PnL. v0 refuses to settle underwater.
     let credit_i128 = (pos.margin_locked as i128)
         .checked_add(pnl)
         .ok_or(ErrorCode::MathOverflow)?;

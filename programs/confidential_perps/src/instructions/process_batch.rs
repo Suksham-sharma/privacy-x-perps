@@ -76,6 +76,14 @@ pub struct ProcessBatch<'info> {
     )]
     pub batch_buffer: Box<Account<'info, BatchBuffer>>,
 
+    /// CHECK: validated as a Pyth PriceUpdateV2 in handler via
+    /// `read_pyth_price` — owner check (Pyth receiver), discriminator,
+    /// Full verification, feed_id, freshness, sign, confidence. We use
+    /// UncheckedAccount because `Account<'info, PriceUpdateV2>` from
+    /// pyth-solana-receiver-sdk requires anchor-lang ^0.32.1; Arcium pins
+    /// us to 1.0.2 so we hand-roll the struct in src/pyth.rs.
+    pub price_update: UncheckedAccount<'info>,
+
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
 }
@@ -83,12 +91,17 @@ pub struct ProcessBatch<'info> {
 pub fn process_batch_handler(
     ctx: Context<ProcessBatch>,
     computation_offset: u64,
-    oracle_price: u64,
 ) -> Result<()> {
-    require!(oracle_price > 0, ErrorCode::ZeroAmount);
-
     let buf = &mut ctx.accounts.batch_buffer;
     let market = &ctx.accounts.market;
+
+    // Read the oracle price BEFORE any state mutation; if Pyth's stale or
+    // mismatched, we fail closed and the batch stays open for retry.
+    let oracle_price = crate::pyth::read_pyth_price(
+        &ctx.accounts.price_update.to_account_info(),
+        &market.pyth_feed_id,
+        &Clock::get()?,
+    )?;
 
     require!(!buf.is_processing, ErrorCode::BatchAlreadyProcessing);
     // v0: exactly 2 orders. (The circuit signature has fixed arity; see

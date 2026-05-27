@@ -18,6 +18,10 @@ idl-build = ["anchor-lang/idl-build", "arcium-anchor/idl-build", "anchor-spl/idl
 anchor-debug = []
 custom-heap = []
 custom-panic = []
+# Loosen Pyth freshness check (30s -> 600s) for localnet tests that read
+# a cloned PriceUpdateV2 whose publish_time is frozen at clone-time. Off
+# in any prod build.
+test-stale-ok = []
 
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }

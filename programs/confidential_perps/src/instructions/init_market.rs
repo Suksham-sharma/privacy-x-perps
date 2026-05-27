@@ -1,3 +1,6 @@
+// init_market — single permissionless init; no admin gate, no upgradeability
+// (Drift-hack defensive). The pyth_feed_id arg pins the asset identifier at
+// init; every later read of a Pyth price_update account validates against it.
 use crate::{
     constants::{BATCH_BUFFER_SEED, DEFAULT_BATCH_WINDOW_SLOTS, MARKET_SEED},
     state::{BatchBuffer, EncryptedOrderSlot, Market},
@@ -31,9 +34,6 @@ pub struct InitMarket<'info> {
     )]
     pub batch_buffer: Box<Account<'info, BatchBuffer>>,
 
-    /// CHECK: stored on Market; not dereferenced here. Pyth client validates on read.
-    pub pyth_feed: UncheckedAccount<'info>,
-
     pub usdc_mint: Box<Account<'info, Mint>>,
 
     #[account(
@@ -49,9 +49,12 @@ pub struct InitMarket<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn init_market_handler(ctx: Context<InitMarket>) -> Result<()> {
+pub fn init_market_handler(
+    ctx: Context<InitMarket>,
+    pyth_feed_id: [u8; 32],
+) -> Result<()> {
     let m = &mut ctx.accounts.market;
-    m.pyth_feed = ctx.accounts.pyth_feed.key();
+    m.pyth_feed_id = pyth_feed_id;
     m.usdc_mint = ctx.accounts.usdc_mint.key();
     m.usdc_vault = ctx.accounts.usdc_vault.key();
     m.batch_window_slots = DEFAULT_BATCH_WINDOW_SLOTS;

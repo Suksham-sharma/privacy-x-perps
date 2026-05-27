@@ -1,6 +1,7 @@
 pub mod constants;
 pub mod error;
 pub mod instructions;
+pub mod pyth;
 pub mod state;
 
 use anchor_lang::prelude::*;
@@ -41,8 +42,11 @@ pub mod confidential_perps {
 
     // -- SOL-PERP matching --
 
-    pub fn init_market(ctx: Context<InitMarket>) -> Result<()> {
-        init_market::init_market_handler(ctx)
+    pub fn init_market(
+        ctx: Context<InitMarket>,
+        pyth_feed_id: [u8; 32],
+    ) -> Result<()> {
+        init_market::init_market_handler(ctx, pyth_feed_id)
     }
 
     pub fn submit_order(
@@ -76,9 +80,8 @@ pub mod confidential_perps {
     pub fn process_batch(
         ctx: Context<ProcessBatch>,
         computation_offset: u64,
-        oracle_price: u64,
     ) -> Result<()> {
-        process_batch::process_batch_handler(ctx, computation_offset, oracle_price)
+        process_batch::process_batch_handler(ctx, computation_offset)
     }
 
     #[arcium_callback(encrypted_ix = "match_batch")]
@@ -99,14 +102,11 @@ pub mod confidential_perps {
         withdraw::withdraw_handler(ctx, amount)
     }
 
-    pub fn close_position(ctx: Context<ClosePosition>, exit_price: u64) -> Result<()> {
-        close_position::close_position_handler(ctx, exit_price)
+    pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
+        close_position::close_position_handler(ctx)
     }
 
-    pub fn liquidate_position(
-        ctx: Context<LiquidatePosition>,
-        exit_price: u64,
-    ) -> Result<()> {
-        liquidate_position::liquidate_position_handler(ctx, exit_price)
+    pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
+        liquidate_position::liquidate_position_handler(ctx)
     }
 }

@@ -36,6 +36,18 @@ pub enum ErrorCode {
     MarketAlreadyInitialized,
     #[msg("Invalid Pyth feed")]
     InvalidPythFeed,
+    #[msg("Pyth account is not owned by the receiver program or has bad data")]
+    InvalidPythAccount,
+    #[msg("Pyth price update is not fully verified (Wormhole 2/3 threshold)")]
+    PythVerificationInsufficient,
+    #[msg("Pyth account is for a different asset than the market expects")]
+    PythFeedIdMismatch,
+    #[msg("Pyth price is stale beyond MAX_PRICE_AGE_SECS")]
+    PythPriceStale,
+    #[msg("Pyth reported a non-positive price")]
+    PythPriceInvalid,
+    #[msg("Pyth confidence interval exceeds MAX_PRICE_CONF_BPS of price")]
+    PythConfidenceTooWide,
     #[msg("Insufficient collateral balance")]
     InsufficientCollateral,
     #[msg("Withdrawal would exceed per-slot rate limit (5% of vault)")]

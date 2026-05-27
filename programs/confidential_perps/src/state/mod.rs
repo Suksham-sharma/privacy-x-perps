@@ -4,9 +4,15 @@ use crate::constants::MAX_ORDERS;
 
 // SOL-PERP market. Init once, immutable thereafter (Drift-hack defensive).
 // No admin field by design — no admin instructions exist, ever.
+//
+// `pyth_feed_id` is the 32-byte Pyth feed identifier (NOT a Pubkey of an
+// account). Pyth's `PriceUpdateV2` accounts have unstable addresses (a
+// fresh keypair per update), but each carries a stable feed_id inside. We
+// pin the feed_id at init and validate every passed price_update account
+// against it. For SOL/USD the feed_id is `SOL_USD_FEED_ID` in constants.rs.
 #[account]
 pub struct Market {
-    pub pyth_feed: Pubkey,        // locked at init
+    pub pyth_feed_id: [u8; 32],   // locked at init; 32-byte Pyth asset id
     pub usdc_mint: Pubkey,
     pub usdc_vault: Pubkey,       // program-controlled USDC ATA (authority = this Market PDA)
     pub batch_window_slots: u64,
@@ -20,7 +26,7 @@ pub struct Market {
 }
 
 impl Market {
-    // discriminator + pyth + mint + vault + window + batch_id + bump
+    // discriminator + feed_id(32) + mint + vault + window + batch_id + bump
     //   + rate_limit_slot + rate_limit_vault_snapshot + rate_limit_withdrawn
     pub const SIZE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 8 + 8;
 }
