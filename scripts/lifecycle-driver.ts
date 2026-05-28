@@ -294,11 +294,9 @@ async function main() {
   await new Promise((r) => setTimeout(r, 3000));
 
   // ---- 8. process_batch ----
-  const computationOffset = new anchor.BN(randomBytes(8), "hex");
-  const compDefOffset = Buffer.from(getCompDefAccOffset("match_batch")).readUInt32LE();
-
-  // Wire the event listener BEFORE submitting the tx, otherwise we
-  // race the callback.
+  // Wire the event listener BEFORE the crank, otherwise we race the
+  // callback. The listener doesn't care WHO calls process_batch; this
+  // lets KEEPER_DRIVES_CRANK=1 mode wait for the keeper to crank.
   type Event = anchor.IdlEvents<(typeof program)["idl"]>;
   const settledPromise = new Promise<Event["batchSettledEvent"]>((res) => {
     const id = program.addEventListener("batchSettledEvent", (e) => {
@@ -307,26 +305,35 @@ async function main() {
     });
   });
 
-  await program.methods
-    .processBatch(computationOffset)
-    .accountsPartial({
-      payer: admin.publicKey,
-      mxeAccount: getMXEAccAddress(program.programId),
-      mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
-      executingPool: getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
-      computationAccount: getComputationAccAddress(arciumEnv.arciumClusterOffset, computationOffset),
-      compDefAccount: getCompDefAccAddress(program.programId, compDefOffset),
-      clusterAccount: getClusterAccAddress(arciumEnv.arciumClusterOffset),
-      market: marketPda,
-      batchBuffer: batchBufferPda,
-      priceUpdate: PYTH_PRICE_UPDATE,
-    })
-    .signers([admin])
-    .rpc({ skipPreflight: true, commitment: "confirmed" });
-  log(`process_batch queued (computation_offset=${computationOffset.toString().slice(0,8)}…)`);
+  if (process.env.KEEPER_DRIVES_CRANK) {
+    log(`process_batch: SKIP (waiting for keeper to crank)`);
+  } else {
+    const computationOffset = new anchor.BN(randomBytes(8), "hex");
+    const compDefOffset = Buffer.from(getCompDefAccOffset("match_batch")).readUInt32LE();
+    await program.methods
+      .processBatch(computationOffset)
+      .accountsPartial({
+        payer: admin.publicKey,
+        mxeAccount: getMXEAccAddress(program.programId),
+        mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
+        executingPool: getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
+        computationAccount: getComputationAccAddress(arciumEnv.arciumClusterOffset, computationOffset),
+        compDefAccount: getCompDefAccAddress(program.programId, compDefOffset),
+        clusterAccount: getClusterAccAddress(arciumEnv.arciumClusterOffset),
+        market: marketPda,
+        batchBuffer: batchBufferPda,
+        priceUpdate: PYTH_PRICE_UPDATE,
+      })
+      .signers([admin])
+      .rpc({ skipPreflight: true, commitment: "confirmed" });
+    log(`process_batch queued (computation_offset=${computationOffset.toString().slice(0,8)}…)`);
+  }
 
   // ---- 9. await MPC callback ----
-  await awaitComputationFinalization(provider, computationOffset, program.programId, "confirmed");
+  // KEEPER_DRIVES_CRANK mode doesn't know the computationOffset the
+  // keeper picked, so we wait on the batchSettledEvent listener
+  // (already armed above) — fires when our callback handler runs,
+  // regardless of who triggered the crank.
   const settled = await settledPromise;
   log(`callback fired → clearing=${settled.clearingPrice.toString()}  vol=${settled.totalVolume.toString()}`);
 

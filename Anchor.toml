@@ -37,4 +37,3 @@ filename = "tests/fixtures/pyth_sol_usd.json"
 
 [[test.validator.clone]]
 address = "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ"
-
