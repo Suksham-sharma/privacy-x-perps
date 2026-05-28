@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Confidential Perps — Trade with size. Without showing your hand.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,500;1,9..144,600&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #F2EEE4;
+    --paper-2: #EBE6D9;
+    --card: #FBFAF5;
+    --ink: #1A1815;
+    --ink-2: #45413A;
+    --ink-3: #7A746763;
+    --muted: #736D5F;
+    --line: rgba(26,24,21,0.14);
+    --line-2: rgba(26,24,21,0.28);
+    --accent: #2438DE;
+    --accent-deep: #1A2AAE;
+    --long: #1C7C4A;
+    --short: #B83227;
+    --gold: #9A6B1E;
+    --sans: "Archivo", system-ui, sans-serif;
+    --serif: "Fraunces", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
+    overflow-x: hidden;
+    position: relative;
+  }
+  /* paper grain */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+  }
+  ::selection { background: var(--accent); color: #fff; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { width: 100%; max-width: 1160px; margin: 0 auto; padding: 0 32px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted); }
+
+  /* ---------- classification strip ---------- */
+  .classbar {
+    background: var(--ink); color: var(--paper);
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    overflow: hidden; white-space: nowrap; padding: 7px 0;
+  }
+  .classbar .scroll { display: inline-block; animation: marquee 38s linear infinite; }
+  .classbar span { padding: 0 26px; opacity: 0.78; }
+  .classbar .dot { color: #C9A227; }
+  @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  /* ---------- nav ---------- */
+  header { position: sticky; top: 0; z-index: 100; background: rgba(242,238,228,0.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); transition: box-shadow .3s; }
+  header.scrolled { box-shadow: 0 1px 0 var(--line), 0 8px 24px -16px rgba(26,24,21,0.4); }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 66px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark { width: 30px; height: 30px; border: 1.5px solid var(--ink); position: relative; display: grid; place-items: center; }
+  .mark::before { content: ""; width: 9px; height: 9px; border: 1.5px solid var(--ink); border-radius: 50%; }
+  .mark::after { content: ""; position: absolute; width: 1.5px; height: 7px; background: var(--ink); bottom: 4px; }
+  .brand .name { font-family: var(--serif); font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
+  .brand .name em { font-style: italic; }
+  .nav-links { display: flex; gap: 32px; }
+  .nav-links a { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-2); transition: color .15s; position: relative; }
+  .nav-links a:hover { color: var(--accent); }
+  .nav-cta { display: flex; align-items: center; gap: 18px; }
+
+  /* ---------- buttons ---------- */
+  .btn { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; cursor: pointer; border: 1.5px solid var(--ink); background: transparent; color: var(--ink); padding: 0 18px; height: 44px; transition: all .2s var(--ease); }
+  .btn:hover { background: var(--ink); color: var(--paper); }
+  .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-accent:hover { background: var(--accent-deep); border-color: var(--accent-deep); color: #fff; }
+  .btn-sm { height: 38px; font-size: 11.5px; padding: 0 15px; }
+  .btn-lg { height: 52px; font-size: 13px; padding: 0 26px; }
+  .btn .arrow { transition: transform .2s var(--ease); }
+  .btn:hover .arrow { transform: translateX(3px); }
+  .btn-link { background: none; border: none; padding: 0; height: auto; color: var(--accent); border-bottom: 1.5px solid var(--accent); padding-bottom: 2px; }
+  .btn-link:hover { background: none; color: var(--accent-deep); }
+
+  /* ---------- stamp ---------- */
+  .stamp { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--short); border: 2px solid var(--short); padding: 5px 11px; transform: rotate(-4deg); border-radius: 3px; opacity: 0.92; font-weight: 600; }
+  .stamp.blue { color: var(--accent); border-color: var(--accent); }
+  .stamp.green { color: var(--long); border-color: var(--long); }
+
+  /* ---------- redaction + cipher ---------- */
+  .redact { display: inline-block; background: var(--ink); color: transparent; border-radius: 2px; padding: 0 5px; user-select: none; transition: background .35s, color .35s; font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+  .redact.revealed { background: transparent; color: var(--ink); padding: 0; }
+  .cipher { font-family: var(--mono); color: var(--muted); letter-spacing: 0.04em; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 78px 0 64px; position: relative; }
+  .hero::before { content:""; position:absolute; inset:-1px 0 0 0; z-index:0; pointer-events:none;
+    background: url("cperps-guilloche.png") right -60px top -80px / 78% auto no-repeat;
+    opacity: 0.19; mix-blend-mode: multiply;
+    -webkit-mask-image: radial-gradient(82% 92% at 95% 22%, #000 0%, rgba(0,0,0,0.5) 40%, transparent 68%);
+            mask-image: radial-gradient(82% 92% at 95% 22%, #000 0%, rgba(0,0,0,0.5) 40%, transparent 68%);
+  }
+  .hero > .wrap { position: relative; z-index: 1; }
+  .doc-head { display: flex; gap: 0; border-top: 1.5px solid var(--ink); border-bottom: 1px solid var(--line); margin-bottom: 44px; flex-wrap: wrap; }
+  .doc-field { padding: 12px 22px 12px 0; margin-right: 22px; border-right: 1px solid var(--line); }
+  .doc-field:last-child { border-right: none; }
+  .doc-field .k { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted); display: block; margin-bottom: 3px; }
+  .doc-field .v { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .doc-field .v.live { color: var(--long); }
+  .hero-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 56px; align-items: end; }
+  h1.hero-title { font-family: var(--serif); font-weight: 500; font-size: clamp(46px, 6.4vw, 92px); line-height: 0.98; letter-spacing: -0.025em; }
+  h1.hero-title em { font-style: italic; font-weight: 400; }
+  h1.hero-title .u { position: relative; white-space: nowrap; }
+  h1.hero-title .u::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0.08em; height: 3px; background: var(--accent); }
+  .hero-sub { font-size: 18px; color: var(--ink-2); line-height: 1.6; max-width: 46ch; margin: 30px 0 34px; }
+  .hero-sub b { color: var(--ink); font-weight: 600; }
+  .hero-cta { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+  /* dossier card (hero right) */
+  .dossier { background: var(--card); border: 1.5px solid var(--ink); position: relative; box-shadow: 8px 8px 0 rgba(26,24,21,0.08); }
+  .dossier-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); }
+  .dossier-top .t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .dossier-top .n { font-family: var(--mono); font-size: 11px; opacity: 0.7; }
+  .dossier-body { padding: 18px 16px; }
+  .drow { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .drow:last-of-type { border-bottom: none; }
+  .drow .k { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+  .drow .v { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+  .tag { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 2px; letter-spacing: 0.08em; }
+  .tag.long { color: var(--long); background: rgba(28,124,74,0.12); }
+  .dossier .stamp-wrap { position: absolute; top: 64px; right: -14px; z-index: 2; }
+  .dossier-foot { padding: 14px 16px; border-top: 1.5px solid var(--ink); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .keyhint { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  /* ---------- section frame ---------- */
+  section.block { padding: 96px 0; position: relative; }
+  .sec-num { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: 0.1em; }
+  .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; border-bottom: 1.5px solid var(--ink); padding-bottom: 22px; margin-bottom: 52px; }
+  .sec-head .left { max-width: 60%; }
+  h2.sec-title { font-family: var(--serif); font-weight: 500; font-size: clamp(30px, 4vw, 52px); line-height: 1.02; letter-spacing: -0.02em; margin-top: 14px; }
+  h2.sec-title em { font-style: italic; }
+  .sec-head .right { font-size: 15px; color: var(--ink-2); max-width: 34ch; line-height: 1.6; padding-bottom: 4px; }
+
+  /* microprint divider */
+  .microprint { font-family: var(--mono); font-size: 8px; letter-spacing: 0.3em; color: var(--muted); white-space: nowrap; overflow: hidden; opacity: 0.55; padding: 6px 0; text-transform: uppercase; }
+
+  /* ---------- terminal (light report) ---------- */
+  .term { border: 1.5px solid var(--ink); background: var(--card); box-shadow: 10px 10px 0 rgba(26,24,21,0.07); }
+  .term-bar { display: flex; align-items: center; gap: 18px; padding: 13px 18px; border-bottom: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); }
+  .term-bar .mkt { font-family: var(--mono); font-weight: 600; font-size: 14px; letter-spacing: 0.04em; display: flex; align-items: center; gap: 9px; }
+  .term-bar .mkt .glyph { width: 13px; height: 13px; border: 1.5px solid var(--paper); border-radius: 50%; }
+  .term-stats { display: flex; gap: 26px; margin-left: 8px; }
+  .term-stats .s { display: flex; flex-direction: column; }
+  .term-stats .s .k { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.14em; opacity: 0.6; text-transform: uppercase; }
+  .term-stats .s .v { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .term-stats .s .v.up { color: #7BD3A0; }
+  .term-spacer { flex: 1; }
+  .term-bar .sess { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; border: 1px solid rgba(242,238,228,0.4); padding: 5px 9px; border-radius: 2px; display: flex; align-items: center; gap: 7px; }
+  .term-bar .sess .pip { width: 6px; height: 6px; border-radius: 50%; background: #7BD3A0; }
+  .term-body { display: grid; grid-template-columns: 1.6fr 0.95fr; }
+  .term-chart { border-right: 1.5px solid var(--ink); }
+  .chart-head { display: flex; align-items: baseline; gap: 14px; padding: 16px 20px 6px; }
+  .chart-head .px { font-family: var(--serif); font-size: 30px; font-weight: 500; letter-spacing: -0.01em; }
+  .chart-head .chg { font-family: var(--mono); font-size: 13px; color: var(--long); }
+  .chart-head .tf { margin-left: auto; display: flex; gap: 3px; }
+  .chart-head .tf span { font-family: var(--mono); font-size: 10.5px; color: var(--muted); padding: 3px 8px; }
+  .chart-head .tf span.on { color: var(--accent); border: 1px solid var(--accent); border-radius: 2px; }
+  .chart-svg { padding: 4px 8px 0; }
+  .chart-svg svg { width: 100%; height: 172px; display: block; }
+  .ob { border-top: 1.5px solid var(--ink); padding: 13px 20px 16px; }
+  .ob-h { display: grid; grid-template-columns: 1fr 1fr 1fr; font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-bottom: 8px; }
+  .ob-h span:nth-child(2) { text-align: center; } .ob-h span:nth-child(3) { text-align: right; }
+  .ob-row { display: grid; grid-template-columns: 1fr 1fr 1fr; font-family: var(--mono); font-size: 12.5px; padding: 4px 0; align-items: center; }
+  .ob-row .p { font-weight: 500; } .ob-row.bid .p { color: var(--long); } .ob-row.ask .p { color: var(--short); }
+  .ob-row .sz { text-align: center; } .ob-row .tr { text-align: right; color: var(--muted); }
+
+  .ticket { padding: 18px; display: flex; flex-direction: column; gap: 15px; }
+  .ls { display: grid; grid-template-columns: 1fr 1fr; border: 1.5px solid var(--ink); }
+  .ls button { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; height: 38px; border: none; background: transparent; cursor: pointer; color: var(--muted); font-weight: 500; }
+  .ls button.on-long { background: var(--long); color: #fff; }
+  .ls button + button { border-left: 1.5px solid var(--ink); }
+  .fld .flab { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px; }
+  .fld .fin { display: flex; align-items: center; justify-content: space-between; border: 1.5px solid var(--ink); height: 46px; padding: 0 13px; background: var(--paper); }
+  .fld .fin .u { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .lev-track { height: 4px; background: var(--paper-2); border: 1px solid var(--line-2); position: relative; margin: 16px 0 8px; }
+  .lev-fill { position: absolute; inset: 0 60% 0 0; background: var(--accent); }
+  .lev-knob { position: absolute; left: 40%; top: 50%; width: 14px; height: 14px; background: var(--ink); transform: translate(-50%,-50%); }
+  .lev-marks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+  .ticket-sum { border-top: 1px dashed var(--line-2); padding-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+  .ticket-sum .l { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11.5px; }
+  .ticket-sum .l .k { color: var(--muted); }
+  .seal { display: flex; align-items: center; gap: 9px; border: 1px solid var(--accent); background: rgba(36,56,222,0.05); padding: 9px 11px; font-family: var(--mono); font-size: 10.5px; color: var(--accent); letter-spacing: 0.04em; }
+  .submit { height: 48px; background: var(--accent); color: #fff; border: none; font-family: var(--mono); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; cursor: pointer; transition: background .2s; }
+  .submit:hover { background: var(--accent-deep); }
+
+  /* ---------- how it works (sequence) ---------- */
+  .seq { display: grid; grid-template-columns: repeat(3, 1fr); position: relative; }
+  .seq::before { content: ""; position: absolute; top: 34px; left: 8%; right: 8%; height: 1.5px; background: var(--line-2); z-index: 0; }
+  .seq-step { position: relative; z-index: 1; padding-right: 28px; }
+  .seq-step:last-child { padding-right: 0; }
+  .seq-num { width: 64px; height: 64px; border: 1.5px solid var(--ink); background: var(--paper); display: grid; place-items: center; font-family: var(--serif); font-size: 26px; font-weight: 500; margin-bottom: 24px; }
+  .seq-step h3 { font-family: var(--serif); font-size: 23px; font-weight: 500; letter-spacing: -0.01em; margin-bottom: 10px; }
+  .seq-step p { font-size: 14.5px; color: var(--ink-2); line-height: 1.6; margin-bottom: 18px; max-width: 32ch; }
+  .seq-demo { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line-2); background: var(--card); padding: 12px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .seq-demo .ar { color: var(--muted); }
+
+  /* ---------- privacy ledger (centerpiece) ---------- */
+  .ledger-wrap { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 56px; align-items: center; }
+  .ledger-copy h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(30px, 3.6vw, 46px); line-height: 1.04; letter-spacing: -0.02em; margin-bottom: 20px; }
+  .ledger-copy h2 em { font-style: italic; }
+  .ledger-copy p { font-size: 16px; color: var(--ink-2); line-height: 1.65; margin-bottom: 16px; max-width: 42ch; }
+  .ledger { border: 1.5px solid var(--ink); background: var(--card); box-shadow: 10px 10px 0 rgba(26,24,21,0.07); }
+  .ledger-h { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .lpos { display: grid; grid-template-columns: 1fr 124px 124px; gap: 20px; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .lpos.you { background: rgba(36,56,222,0.045); box-shadow: inset 3px 0 0 var(--accent); }
+  .lpos:last-child { border-bottom: none; }
+  .lpos .side { display: flex; align-items: center; gap: 11px; }
+  .lpos .mkt { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .lpos .cell { text-align: right; }
+  .lpos .cell .k { font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); display: block; margin-bottom: 4px; }
+  .lpos .cell .v { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+  .ledger-foot { padding: 15px 18px; border-top: 1.5px solid var(--ink); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+
+  /* ---------- comparison (ledger table) ---------- */
+  .cmp { border: 1.5px solid var(--ink); background: var(--card); overflow: hidden; }
+  .cmp table { width: 100%; border-collapse: collapse; }
+  .cmp th, .cmp td { padding: 18px 22px; text-align: left; border-bottom: 1px solid var(--line); }
+  .cmp thead th { background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; border-bottom: none; }
+  .cmp thead th.us { background: var(--accent); }
+  .cmp td.feat { font-size: 14.5px; color: var(--ink-2); }
+  .cmp td.them { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .cmp td.us { font-family: var(--mono); font-size: 13px; font-weight: 500; background: rgba(36,56,222,0.045); color: var(--ink); }
+  .cmp tr:last-child td { border-bottom: none; }
+  .cmp .x { color: var(--short); }
+  .cmp .ok { color: var(--long); }
+  .cmp .strike { text-decoration: line-through; opacity: 0.6; }
+
+  /* ---------- FAQ ---------- */
+  .faq { border-top: 1.5px solid var(--ink); }
+  .faq-i { border-bottom: 1px solid var(--line); }
+  .faq-q { display: flex; align-items: baseline; gap: 22px; padding: 26px 6px; cursor: pointer; }
+  .faq-q .qn { font-family: var(--mono); font-size: 12px; color: var(--accent); width: 34px; flex-shrink: 0; }
+  .faq-q .qt { font-family: var(--serif); font-size: clamp(19px,2vw,24px); font-weight: 500; letter-spacing: -0.01em; flex: 1; }
+  .faq-q .pm { font-family: var(--mono); font-size: 20px; color: var(--accent); transition: transform .25s; }
+  .faq-i.open .faq-q .pm { transform: rotate(45deg); }
+  .faq-a { max-height: 0; overflow: hidden; transition: max-height .32s var(--ease); }
+  .faq-i.open .faq-a { max-height: 240px; }
+  .faq-a div { padding: 0 6px 28px 62px; color: var(--ink-2); font-size: 15.5px; line-height: 1.7; max-width: 70ch; }
+
+  /* ---------- CTA (bearer certificate) ---------- */
+  .cta-cert { padding: 96px 0 108px; }
+  .cert { border: 1.5px solid var(--ink); background: var(--card); padding: 14px; position: relative; box-shadow: 12px 12px 0 rgba(26,24,21,0.07); }
+  .cert::before { content:""; position:absolute; inset:7px; border:1px solid var(--line-2); pointer-events:none; }
+  .cert-in { border:1px solid var(--line-2); padding: 62px 40px; text-align:center; position:relative; }
+  .cert .corner { position:absolute; width:22px; height:22px; border:1.5px solid var(--ink); }
+  .cert .corner.tl{top:-1px;left:-1px;border-right:none;border-bottom:none}
+  .cert .corner.tr{top:-1px;right:-1px;border-left:none;border-bottom:none}
+  .cert .corner.bl{bottom:-1px;left:-1px;border-right:none;border-top:none}
+  .cert .corner.br{bottom:-1px;right:-1px;border-left:none;border-top:none}
+  .cert .kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:0.3em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .cert .orn{font-family:var(--serif);color:var(--accent);font-size:18px;letter-spacing:0.4em;margin-bottom:18px}
+  .cert h2{font-family:var(--serif);font-weight:500;font-size:clamp(32px,4.4vw,58px);line-height:1.02;letter-spacing:-0.02em;margin-bottom:18px}
+  .cert h2 em{font-style:italic}
+  .cert p{color:var(--ink-2);font-size:16px;max-width:46ch;margin:0 auto 32px}
+  .cert .btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:26px}
+  .cert .seal-row{display:flex;align-items:center;justify-content:center;gap:14px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)}
+
+  /* ---------- footer ---------- */
+  footer { background: var(--paper); padding: 60px 0 0; border-top: 1.5px solid var(--ink); }
+  .foot-grid { display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr; gap: 40px; padding-bottom: 48px; }
+  .foot-brand .brand { margin-bottom: 16px; }
+  .foot-brand p { color: var(--ink-2); font-size: 14px; line-height: 1.6; max-width: 32ch; }
+  .foot-seal-wrap { margin-top: 28px; display: flex; align-items: center; gap: 15px; }
+  .foot-seal { width: 104px; height: 104px; flex: none; border-radius: 50%;
+    background: url("cperps-seal.png") center / 138% auto no-repeat;
+    border: 2px solid var(--ink); transform: rotate(-5deg);
+    box-shadow: inset 0 0 0 4px var(--paper), inset 0 0 0 5.5px rgba(26,24,21,0.4); }
+  .foot-seal-cap { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); max-width: 15ch; line-height: 1.6; }
+  .foot-col h4 { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin-bottom: 16px; }
+  .foot-col a { display: block; font-size: 14px; color: var(--ink-2); margin-bottom: 11px; transition: color .15s; }
+  .foot-col a:hover { color: var(--accent); }
+  .foot-bottom { border-top: 1px solid var(--line); padding: 20px 0 28px; display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+
+  svg.ic { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.6; vertical-align: -0.12em; }
+
+  @media (max-width: 880px) {
+    .nav-links { display: none; }
+    .hero-grid, .term-body, .ledger-wrap { grid-template-columns: 1fr; gap: 36px; }
+    .term-chart { border-right: none; border-bottom: 1.5px solid var(--ink); }
+    .seq { grid-template-columns: 1fr; gap: 36px; } .seq::before { display: none; }
+    .seq-step { padding-right: 0; }
+    .foot-grid { grid-template-columns: 1fr 1fr; }
+    .sec-head { flex-direction: column; align-items: flex-start; gap: 16px; } .sec-head .left { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <!-- icon defs -->
+  <svg width="0" height="0" style="position:absolute"><defs>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="5"/><path d="M11.5 11.5 L20 20 M17 17 l3 0 M16 16 l0 3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11 V7 a4 4 0 0 1 8 0 v4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></symbol>
+  </defs></svg>
+
+  <div class="classbar"><div class="scroll" id="marq"></div></div>
+
+  <header id="hdr">
+    <div class="wrap nav">
+      <a href="#" class="brand"><span class="mark"></span><span class="name">Confidential <em>Perps</em></span></a>
+      <nav class="nav-links">
+        <a href="#dossier">Protocol</a>
+        <a href="#how">Lifecycle</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#compare">Compare</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="nav-cta">
+        <a href="#" class="nav-links" style="display:flex"><span>Docs</span></a>
+        <a href="#" class="btn btn-accent btn-sm">Launch Terminal <svg class="ic arrow"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div>
+          <h1 class="hero-title">Trade with size.<br>Without showing<br>your <span class="u"><em>hand</em></span>.</h1>
+          <p class="hero-sub">The first confidential perpetuals exchange on Solana. Orders are encrypted in your browser, matched inside a <b>multi-party computation</b> network, and settled on-chain. Your position size is sealed — <b>even from us</b>.</p>
+          <div class="hero-cta">
+            <a href="#" class="btn btn-accent btn-lg">Launch Terminal <svg class="ic arrow"><use href="#i-arrow"/></svg></a>
+            <a href="#how" class="btn btn-lg">Read the brief</a>
+          </div>
+        </div>
+
+        <!-- dossier -->
+        <div class="dossier" id="dossier">
+          <div class="dossier-top"><span class="t"><svg class="ic"><use href="#i-lock"/></svg> Position Dossier</span><span class="n">#A47-2F</span></div>
+          <div class="stamp-wrap"><span class="stamp" id="dStamp">Sealed</span></div>
+          <div class="dossier-body">
+            <div class="drow"><span class="k">Holder</span><span class="v">0x71b9…e8a4</span></div>
+            <div class="drow"><span class="k">Side · Market</span><span class="v"><span class="tag long">LONG</span> SOL-PERP</span></div>
+            <div class="drow"><span class="k">Size</span><span class="v"><span class="redact">184.50 ◎</span></span></div>
+            <div class="drow"><span class="k">Entry</span><span class="v">142.08</span></div>
+            <div class="drow"><span class="k">Unrealized PnL</span><span class="v"><span class="redact">+1,284.05</span></span></div>
+          </div>
+          <div class="dossier-foot">
+            <span class="keyhint">Visible to market: <b style="color:var(--ink)">an order exists</b>. Nothing more.</span>
+            <span class="label" style="color:var(--short); letter-spacing:0.14em">Market view</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap"><div class="microprint" id="mp1"></div></div>
+
+  <!-- PRODUCT TERMINAL -->
+  <section class="block" style="padding-top:56px">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="left">
+          <span class="sec-num">01 — The Terminal</span>
+          <h2 class="sec-title">A trading desk that <em>keeps your secrets.</em></h2>
+        </div>
+        <div class="right">Full depth, real fills, on-chain settlement. The only thing missing is everyone else's view of your size.</div>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="mkt"><span class="glyph"></span> SOL-PERP</span>
+          <div class="term-stats">
+            <div class="s"><span class="k">Mark</span><span class="v">142.0830</span></div>
+            <div class="s"><span class="k">24h</span><span class="v up">+3.42%</span></div>
+            <div class="s"><span class="k">Funding</span><span class="v">0.0094%</span></div>
+            <div class="s"><span class="k">Open Int.</span><span class="v">$12.4M</span></div>
+          </div>
+          <div class="term-spacer"></div>
+          <span class="sess"><span class="pip"></span> Encrypted session</span>
+        </div>
+        <div class="term-body">
+          <div class="term-chart">
+            <div class="chart-head">
+              <span class="px">142.0830</span><span class="chg">+4.71 (3.42%)</span>
+              <div class="tf"><span>15m</span><span>1H</span><span class="on">4H</span><span>1D</span></div>
+            </div>
+            <div class="chart-svg">
+              <svg viewBox="0 0 620 172" preserveAspectRatio="none">
+                <defs><linearGradient id="cf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(36,56,222,0.12)"/><stop offset="1" stop-color="rgba(36,56,222,0)"/></linearGradient></defs>
+                <line x1="0" y1="43" x2="620" y2="43" stroke="rgba(26,24,21,0.07)"/><line x1="0" y1="86" x2="620" y2="86" stroke="rgba(26,24,21,0.07)"/><line x1="0" y1="129" x2="620" y2="129" stroke="rgba(26,24,21,0.07)"/>
+                <path d="M0,128 C50,120 80,138 110,112 C150,80 175,100 210,82 C250,62 280,92 315,74 C350,58 380,30 415,46 C450,62 480,28 515,30 C555,32 585,16 620,14 L620,172 L0,172 Z" fill="url(#cf)"/>
+                <path d="M0,128 C50,120 80,138 110,112 C150,80 175,100 210,82 C250,62 280,92 315,74 C350,58 380,30 415,46 C450,62 480,28 515,30 C555,32 585,16 620,14" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+                <circle cx="620" cy="14" r="3" fill="var(--accent)"/>
+              </svg>
+            </div>
+            <div class="ob">
+              <div class="ob-h"><span>Price · USDC</span><span>Size</span><span>Trader</span></div>
+              <div class="ob-row ask"><span class="p">142.40</span><span class="sz"><span class="redact" data-static>██████</span></span><span class="tr">0x7f…a2</span></div>
+              <div class="ob-row ask"><span class="p">142.22</span><span class="sz"><span class="redact" data-static>████</span></span><span class="tr">0x3c…9e</span></div>
+              <div class="ob-row bid"><span class="p">142.05</span><span class="sz"><span class="redact" data-static>███████</span></span><span class="tr">0x9a…41</span></div>
+              <div class="ob-row bid"><span class="p">141.88</span><span class="sz"><span class="redact" data-static>█████</span></span><span class="tr">0xb1…7d</span></div>
+            </div>
+          </div>
+          <div class="ticket">
+            <div class="ls"><button class="on-long">Long</button><button>Short</button></div>
+            <div class="fld"><div class="flab"><span>Size</span><span>Bal 4,820.00</span></div><div class="fin"><span class="redact" data-static>███████</span><span class="u">USDC</span></div></div>
+            <div class="fld"><div class="flab"><span>Leverage</span><span style="color:var(--accent)">4.0×</span></div><div class="lev-track"><div class="lev-fill"></div><div class="lev-knob"></div></div><div class="lev-marks"><span>1×</span><span>5×</span><span>10×</span></div></div>
+            <div class="ticket-sum">
+              <div class="l"><span class="k">Entry</span><span>142.08</span></div>
+              <div class="l"><span class="k">Liq. price</span><span class="redact" data-static>█████</span></div>
+              <div class="l"><span class="k">Fee</span><span>0.04%</span></div>
+            </div>
+            <div class="seal"><svg class="ic"><use href="#i-lock"/></svg> Encrypted before it leaves your browser</div>
+            <button class="submit">Encrypt &amp; Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="block" id="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="left">
+          <span class="sec-num">02 — Lifecycle</span>
+          <h2 class="sec-title">Three steps. <em>Zero leakage.</em></h2>
+        </div>
+        <div class="right">Every action maps to a cryptographic guarantee — from your keyboard to the chain.</div>
+      </div>
+      <div class="seq">
+        <div class="seq-step">
+          <div class="seq-num">I</div>
+          <h3>Encrypt</h3>
+          <p>You set size and leverage. The client encrypts them against the network's threshold key before you sign.</p>
+          <div class="seq-demo"><span style="color:var(--muted)">184.50</span><span class="ar">→</span><span style="color:var(--accent)">enc()</span><span class="ar">→</span><span class="redact" data-static>0x9a4f…3c21</span></div>
+        </div>
+        <div class="seq-step">
+          <div class="seq-num">II</div>
+          <h3>Match in MPC</h3>
+          <p>Arcium's compute network runs the matching circuit directly over ciphertext. No node decrypts. No node learns your size.</p>
+          <div class="seq-demo"><span class="redact" data-static>████</span><span class="ar">×</span><span class="redact" data-static>████</span><span class="ar">→</span><span style="color:var(--long)">matched ✓</span></div>
+        </div>
+        <div class="seq-step">
+          <div class="seq-num">III</div>
+          <h3>Settle on-chain</h3>
+          <p>The fill posts to Solana with a proof. Collateral and PnL update; your size stays sealed in state.</p>
+          <div class="seq-demo"><span style="color:var(--muted)">tx</span><span style="color:var(--accent)">5Jq…f2A</span><span style="color:var(--long)">confirmed</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap"><div class="microprint" id="mp2"></div></div>
+
+  <!-- PRIVACY LEDGER -->
+  <section class="block" id="privacy" style="background:var(--paper-2); border-top:1.5px solid var(--ink); border-bottom:1.5px solid var(--ink);">
+    <div class="wrap">
+      <div class="ledger-wrap">
+        <div class="ledger-copy">
+          <span class="sec-num">03 — Privacy Model</span>
+          <h2 style="margin-top:14px">The market sees an order.<br><em>Never your size.</em></h2>
+          <p>On every other perps venue your size is public. Whales get front-run and liquidation-hunted because the whole book can see them coming.</p>
+          <p>Here, size is ciphertext on the wire and on-chain. The ledger below is what an observer sees. Only the key-holder can decrypt their own rows.</p>
+          <div style="margin-top:26px; display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
+            <a href="#" class="btn btn-accent">Launch Terminal <svg class="ic arrow"><use href="#i-arrow"/></svg></a>
+            <span class="keyhint">Your row is legible to you. The rest stay redaction bars.</span>
+          </div>
+        </div>
+        <div class="ledger">
+          <div class="ledger-h"><span>Public Position Ledger</span><span>SOL-PERP</span></div>
+          <div class="lpos you">
+            <div class="side"><span class="tag long">LONG</span><span class="mkt">You · 0x71b9</span></div>
+            <div class="cell"><span class="k">Size</span><span class="v">184.50 ◎</span></div>
+            <div class="cell"><span class="k">PnL</span><span class="v" style="color:var(--long)">+1,284.05</span></div>
+          </div>
+          <div class="lpos">
+            <div class="side"><span class="tag" style="color:var(--muted);background:rgba(26,24,21,0.06)">SEALED</span><span class="mkt" style="color:var(--muted)">0x3c8e</span></div>
+            <div class="cell"><span class="k">Size</span><span class="v"><span class="redact" data-static>██████</span></span></div>
+            <div class="cell"><span class="k">PnL</span><span class="v"><span class="redact" data-static>█████</span></span></div>
+          </div>
+          <div class="lpos">
+            <div class="side"><span class="tag" style="color:var(--muted);background:rgba(26,24,21,0.06)">SEALED</span><span class="mkt" style="color:var(--muted)">0xb17d</span></div>
+            <div class="cell"><span class="k">Size</span><span class="v"><span class="redact" data-static>████████</span></span></div>
+            <div class="cell"><span class="k">PnL</span><span class="v"><span class="redact" data-static>██████</span></span></div>
+          </div>
+          <div class="ledger-foot"><span class="keyhint">3 positions · only yours is legible to you</span><span class="stamp blue" style="transform:rotate(-3deg)">MPC-Sealed</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPARE -->
+  <section class="block" id="compare">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="left">
+          <span class="sec-num">04 — The Difference</span>
+          <h2 class="sec-title">Built for traders who <em>move size.</em></h2>
+        </div>
+        <div class="right">Same on-chain settlement you expect. None of the exposure you've learned to live with.</div>
+      </div>
+      <div class="cmp">
+        <table>
+          <thead><tr><th style="width:46%">Capability</th><th>Typical Perp DEX</th><th class="us">Confidential Perps</th></tr></thead>
+          <tbody>
+            <tr><td class="feat">Position size visible to market</td><td class="them"><span class="x">●</span> Fully public</td><td class="us"><svg class="ic" style="color:var(--accent)"><use href="#i-lock"/></svg> Encrypted</td></tr>
+            <tr><td class="feat">Copy-trading / front-running your book</td><td class="them"><span class="x">✕</span> Exposed</td><td class="us"><span class="ok">✓</span> Prevented</td></tr>
+            <tr><td class="feat">Liquidation hunting on large positions</td><td class="them"><span class="x">✕</span> Targeted</td><td class="us"><span class="ok">✓</span> Size hidden</td></tr>
+            <tr><td class="feat">On-chain settlement &amp; verifiability</td><td class="them"><span class="ok">✓</span> Yes</td><td class="us"><span class="ok">✓</span> Yes</td></tr>
+            <tr><td class="feat">Operator can read your positions</td><td class="them"><span class="x">●</span> Sees everything</td><td class="us"><span class="ok">✓</span> Nobody, incl. us</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="block" id="faq" style="padding-top:40px">
+    <div class="wrap">
+      <div class="sec-head">
+        <div class="left"><span class="sec-num">05 — Record</span><h2 class="sec-title">Questions, <em>answered.</em></h2></div>
+      </div>
+      <div class="faq">
+        <div class="faq-i open"><div class="faq-q"><span class="qn">Q1</span><span class="qt">If size is encrypted, how does matching work?</span><span class="pm">+</span></div><div class="faq-a"><div>Matching runs inside Arcium's multi-party computation network. The circuit operates directly on ciphertext — orders are compared and matched without any node decrypting them. The cluster produces a result, not a plaintext.</div></div></div>
+        <div class="faq-i"><div class="faq-q"><span class="qn">Q2</span><span class="qt">Can the team see my positions?</span><span class="pm">+</span></div><div class="faq-a"><div>No. Encryption happens in your browser against a threshold key held collectively by the MPC cluster. There is no server-side plaintext and no operator backdoor. Even we cannot reconstruct your size.</div></div></div>
+        <div class="faq-i"><div class="faq-q"><span class="qn">Q3</span><span class="qt">How do liquidations work if size is private?</span><span class="pm">+</span></div><div class="faq-a"><div>Liquidations stay permissionless. The protocol exposes only what a liquidator needs to act on an underwater position while keeping full size sealed. Solvency remains publicly verifiable.</div></div></div>
+        <div class="faq-i"><div class="faq-q"><span class="qn">Q4</span><span class="qt">What chain and assets are supported?</span><span class="pm">+</span></div><div class="faq-a"><div>Confidential Perps runs on Solana. The launch market is SOL-PERP with USDC collateral. More markets follow once the core is proven on devnet and mainnet-beta.</div></div></div>
+        <div class="faq-i"><div class="faq-q"><span class="qn">Q5</span><span class="qt">Is it live today?</span><span class="pm">+</span></div><div class="faq-a"><div>The full lifecycle — deposit, encrypted order, MPC match, on-chain settlement, close, and liquidate — runs now on Solana devnet. Launch the terminal to try it with devnet funds.</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA — bearer certificate -->
+  <section class="cta-cert">
+    <div class="wrap">
+      <div class="cert">
+        <div class="cert-in">
+          <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+          <div class="kicker">Confidential Perps · Bearer Access</div>
+          <div class="orn">✦ ✦ ✦</div>
+          <h2>Trade in the dark.<br>Settle in <em>the open.</em></h2>
+          <p>Place encrypted orders, keep your size sealed, and settle on-chain with proofs anyone can verify.</p>
+          <div class="btns">
+            <a href="#" class="btn btn-accent btn-lg">Launch Terminal <svg class="ic arrow"><use href="#i-arrow"/></svg></a>
+            <a href="#" class="btn btn-lg">Read the docs</a>
+          </div>
+          <div class="seal-row"><span>No. A47-2F</span><span class="stamp blue" style="transform:rotate(-3deg)">MPC-Sealed</span><span>Devnet 2026</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="wrap">
+      <div class="foot-grid">
+        <div class="foot-brand">
+          <a href="#" class="brand"><span class="mark"></span><span class="name">Confidential <em>Perps</em></span></a>
+          <p>The first confidential perpetuals exchange on Solana. Private size, public settlement.</p>
+          <div class="foot-seal-wrap">
+            <div class="foot-seal"></div>
+            <span class="foot-seal-cap">Issued · Solana Devnet · MMXXVI</span>
+          </div>
+        </div>
+        <div class="foot-col"><h4>Protocol</h4><a href="#">Launch Terminal</a><a href="#how">Lifecycle</a><a href="#privacy">Privacy model</a><a href="#compare">Compare</a></div>
+        <div class="foot-col"><h4>Developers</h4><a href="#">Documentation</a><a href="#">TypeScript SDK</a><a href="#">GitHub</a><a href="#">Arcium</a></div>
+        <div class="foot-col"><h4>Community</h4><a href="#">X / Twitter</a><a href="#">Discord</a><a href="#">Mirror</a><a href="#">Brand kit</a></div>
+      </div>
+      <div class="foot-bottom"><span>© 2026 Confidential Perps — Devnet release</span><span>Encrypted client-side · Matched in MPC · Settled on Solana</span></div>
+    </div>
+  </footer>
+
+  <script>
+    // marquee + microprint content
+    const stripTxt = '★ CONFIDENTIAL ★ POSITION DATA ENCRYPTED CLIENT-SIDE ★ DO NOT EXPOSE YOUR HAND ★ MATCHED IN MULTI-PARTY COMPUTATION ★ SETTLED ON SOLANA ';
+    document.getElementById('marq').innerHTML = '<span>'+stripTxt.replace(/★/g,'<span class="dot">◆</span>')+'</span><span>'+stripTxt.replace(/★/g,'<span class="dot">◆</span>')+'</span>';
+    const micro = ('confidential·perps·'.repeat(60));
+    ['mp1','mp2','mp3'].forEach(id=>{const e=document.getElementById(id); if(e) e.textContent = micro;});
+
+    // sticky nav
+    const hdr = document.getElementById('hdr');
+    const onScroll = () => hdr.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', onScroll); onScroll();
+
+    // FAQ
+    document.querySelectorAll('.faq-i').forEach(it => {
+      it.querySelector('.faq-q').addEventListener('click', () => {
+        const open = it.classList.contains('open');
+        document.querySelectorAll('.faq-i').forEach(x => x.classList.remove('open'));
+        if (!open) it.classList.add('open');
+      });
+    });
+
+    // (decrypt interaction removed — redaction bars are static; your own rows render in plaintext)
+  </script>
+</body>
+</html>
