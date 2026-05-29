@@ -1,6 +1,5 @@
-// match_batch Anchor side — comp def init + callback. The `process_batch`
-// queue-handler (task #17) is a follow-up; until it lands, the callback is
-// reachable code but unfired.
+// match_batch Anchor side — comp def init + callback. process_batch.rs queues
+// the computation whose result fires this callback.
 use crate::{
     constants::{
         BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, POSITION_SEED,
@@ -25,26 +24,22 @@ pub struct InitMatchBatchCompDef<'info> {
     )]
     pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(mut)]
-    /// CHECK: SAFETY — comp_def_account is created by `init_computation_def`
-    /// inside this handler. Pre-init it has no discriminator, so Account<T>
-    /// cannot validate it. After init, the arcium program enforces the
-    /// canonical PDA derivation (program_id + comp def offset) and owner.
-    /// The macro `#[init_computation_definition_accounts("match_batch", payer)]`
-    /// generates the constraints that make this safe.
+    /// CHECK: created by `init_computation_def` in this handler — pre-init it
+    /// has no discriminator, so Account<T> can't validate it. The
+    /// #[init_computation_definition_accounts] macro generates the PDA + owner
+    /// constraints that make this safe.
     pub comp_def_account: UncheckedAccount<'info>,
     #[account(
         mut,
         address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot)
     )]
-    /// CHECK: SAFETY — Solana Address Lookup Table account. Owned by the
-    /// LUT program (not us). Address pinned to derive_mxe_lut_pda(...) above,
-    /// which is the canonical LUT for our MXE; the arcium program verifies
-    /// the LUT contents during computation queuing.
+    /// CHECK: Solana Address Lookup Table, owned by the LUT program. Address
+    /// pinned to derive_mxe_lut_pda above (our MXE's canonical LUT); the arcium
+    /// program verifies its contents during computation queuing.
     pub address_lookup_table: UncheckedAccount<'info>,
     #[account(address = LUT_PROGRAM_ID)]
-    /// CHECK: SAFETY — Address Lookup Table program. Address pinned to the
-    /// constant LUT_PROGRAM_ID. Used only as the CPI target for LUT
-    /// modifications inside `init_computation_def`.
+    /// CHECK: Address Lookup Table program, pinned to LUT_PROGRAM_ID. Used only
+    /// as the CPI target for LUT modifications in `init_computation_def`.
     pub lut_program: UncheckedAccount<'info>,
     pub arcium_program: Program<'info, Arcium>,
     pub system_program: Program<'info, System>,
@@ -55,21 +50,16 @@ pub fn init_match_batch_comp_def_handler(ctx: Context<InitMatchBatchCompDef>) ->
     Ok(())
 }
 
-// ---------- callback ----------
-//
-// Wires the public BatchOutput from the MPC back into on-chain state.
-//
-// Account contract (must match what process_batch passes via callback_ix's
-// extra_accs slice — preserved in this order):
+// Callback — wires the public BatchOutput from the MPC back into on-chain
+// state. Account contract must match the order process_batch passes via
+// callback_ix's extra_accs slice:
 //   [market, batch_buffer, position_a, position_b,
 //    user_collateral_a, user_collateral_b]
 //
-// position_*/user_collateral_* PDAs are all derived against
-// batch_buffer.orders[0/1].owner. process_batch (task #17) MUST snapshot or
-// lock orders[0..2] so they stay readable here — otherwise the PDA derivation
-// drifts and Anchor's seeds check fails. The simplest impl: don't reset
-// BatchBuffer in process_batch; reset it here in the callback after fills
-// land.
+// position_*/user_collateral_* PDAs derive against batch_buffer.orders[0/1]
+// .owner, so process_batch must NOT reset the buffer — the callback resets it
+// here after fills land, otherwise the derivation drifts and Anchor's seeds
+// check fails.
 
 #[callback_accounts("match_batch")]
 #[derive(Accounts)]
@@ -83,21 +73,19 @@ pub struct MatchBatchCallback<'info> {
         address = derive_mxe_pda!()
     )]
     pub mxe_account: Account<'info, MXEAccount>,
-    /// CHECK: SAFETY — computation_account is verified by the arcium program
-    /// via `validate_callback_ixs` (injected by the `#[arcium_callback]`
-    /// macro) which checks the instructions sysvar against the expected
-    /// callback discriminator + program id.
+    /// CHECK: verified by the arcium program via `validate_callback_ixs`
+    /// (injected by #[arcium_callback]) against the instructions sysvar.
     pub computation_account: UncheckedAccount<'info>,
     #[account(
         address = derive_cluster_pda!(mxe_account)
     )]
     pub cluster_account: Account<'info, Cluster>,
     #[account(address = ::arcium_anchor::solana_instructions_sysvar::ID)]
-    /// CHECK: SAFETY — pinned to the Solana instructions sysvar id via the
-    /// account constraint above. Read-only inside validate_callback_ixs.
+    /// CHECK: pinned to the Solana instructions sysvar id (constraint above);
+    /// read-only inside validate_callback_ixs.
     pub instructions_sysvar: UncheckedAccount<'info>,
 
-    // -- extra_accs (passed by process_batch's callback_ix call) --
+    // extra_accs — passed by process_batch's callback_ix call.
 
     #[account(
         seeds = [MARKET_SEED],
@@ -126,14 +114,12 @@ pub struct MatchBatchCallback<'info> {
     )]
     pub position_b: Box<Account<'info, Position>>,
 
-    // UserCollateral PDAs are validated + deserialized MANUALLY in the
-    // handler (see `credit_refund`). Adding two more typed `Box<Account<...>>`
-    // here pushed Anchor's generated `try_accounts` past the BPF stack budget
-    // (linker emits "overwrites values in the frame" / "may cause undefined
-    // behavior"). Since the refund only fires on NoMatch, paying the
-    // validation cost only on that branch is also a CU win on the happy path.
-    /// CHECK: PDA derivation + owner + discriminator validated in handler
-    /// via `credit_refund`. `mut` here only sets the writable bit.
+    // UserCollateral PDAs are validated + deserialized manually in the handler
+    // (see `credit_refund`): two more typed Box<Account<...>> pushed Anchor's
+    // generated try_accounts past the BPF stack budget. Validating only on the
+    // NoMatch branch (where the refund fires) is also a happy-path CU win.
+    /// CHECK: PDA derivation + owner + discriminator validated in handler via
+    /// `credit_refund`. `mut` here only sets the writable bit.
     #[account(mut)]
     pub user_collateral_a: UncheckedAccount<'info>,
     /// CHECK: same as user_collateral_a.
@@ -189,9 +175,7 @@ pub fn match_batch_callback_handler(
 
     if clearing_price == 0 {
         // No-match: refund both locked margins. On match, max_margin stays
-        // locked as the position's backing collateral (v0 doesn't refund
-        // partial-fill excess — would leak order size; see EncryptedOrderSlot
-        // doc comment).
+        // locked as the position's backing collateral (see EncryptedOrderSlot).
         credit_refund(
             &ctx.accounts.user_collateral_a,
             &market_key,

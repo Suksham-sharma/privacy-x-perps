@@ -14,16 +14,13 @@
 //   10. alice.closePosition(), bob.closePosition() at the fixture price
 //   11. print final balances
 //
-// Localnet only for now — devnet works against real Pyth (~$200 SOL/USD)
-// and would need orders priced at the real mantissa (~20e9). Documented
-// as TODO at bottom of file.
+// Localnet only — devnet needs orders priced at the real ~$200 mantissa
+// (~20e9); see the TODO at the bottom of the file.
 //
-// Prereq: `arcium localnet` running in another terminal. Then:
-//   pnpm exec tsx scripts/lifecycle-driver.ts
+// Prereq: `arcium localnet` running, then:  pnpm exec tsx scripts/lifecycle-driver.ts
 //
-// arcium-client's getArciumEnv() reads ARCIUM_CLUSTER_OFFSET from the
-// process env. Localnet always uses cluster offset 0 (cluster_acc_0.json
-// in artifacts/). Default it here so users don't need to set it.
+// getArciumEnv() reads ARCIUM_CLUSTER_OFFSET from the env; localnet always uses
+// offset 0 (cluster_acc_0.json in artifacts/), defaulted here so users needn't set it.
 process.env.ARCIUM_CLUSTER_OFFSET ??= "0";
 
 import * as anchor from "@anchor-lang/core";

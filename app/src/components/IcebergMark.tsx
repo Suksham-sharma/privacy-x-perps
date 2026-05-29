@@ -1,6 +1,5 @@
-// Iceberg brand mark — vectorized from the Gemini master, recolored via `currentColor`.
-// viewBox cropped to the berg bbox. Two paths: submerged mass + faceted tip.
-// Generated from design/ref-iceberg-gemini.svg — regenerate, do not hand-edit the path data.
+// Iceberg brand mark — two paths (submerged mass + faceted tip), recolored via `currentColor`.
+// Generated from design/ref-iceberg-gemini.svg — regenerate, don't hand-edit the path data.
 
 type Props = { size?: number; className?: string; title?: string };
 

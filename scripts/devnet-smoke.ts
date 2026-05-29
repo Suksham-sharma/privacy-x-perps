@@ -1,20 +1,17 @@
 // Devnet smoke test for the Pyth read path.
 //
-// Goal: verify the deployed binary's read_pyth_price works against a
-// REAL 134-byte sponsored Pyth account, not just our 133-byte localnet
-// fixture. The senior reviewer specifically flagged that switching
-// from try_from_slice -> reader-style deserialize should make the same
-// code path work for both sizes; this exercises that against the real
-// account on-chain.
+// Verifies the deployed binary's read_pyth_price works against a REAL 134-byte
+// sponsored Pyth account, not just our 133-byte localnet fixture (the senior
+// reviewer flagged that the try_from_slice -> reader-style deserialize switch
+// should handle both sizes).
 //
-// Strategy: call process_batch with the BatchBuffer empty (n_orders=0).
-// process_batch_handler reads Pyth FIRST, then checks n_orders==2.
-// If our deserialize handles the trailing byte cleanly we'll see
-// BatchNotReady (the second gate). If the Pyth read itself fails we'd
-// see InvalidPythAccount / PythVerificationInsufficient / etc.
+// Strategy: call process_batch with an empty BatchBuffer (n_orders=0). The
+// handler reads Pyth FIRST, then checks n_orders==2, so a clean deserialize
+// surfaces BatchNotReady; a failed Pyth read surfaces InvalidPythAccount /
+// PythVerificationInsufficient / etc.
 //
-// Cost: ~5000 lamports tx fee. No Arcium fees burned because the
-// handler returns Err before reaching queue_computation.
+// Cost: ~5000 lamports tx fee — no Arcium fees, since the handler errors
+// before queue_computation.
 
 import * as anchor from "@anchor-lang/core";
 import { Program } from "@anchor-lang/core";

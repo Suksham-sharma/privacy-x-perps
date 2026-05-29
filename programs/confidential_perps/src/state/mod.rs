@@ -2,14 +2,13 @@ use anchor_lang::prelude::*;
 
 use crate::constants::MAX_ORDERS;
 
-// SOL-PERP market. Init once, immutable thereafter (Drift-hack defensive).
-// No admin field by design — no admin instructions exist, ever.
+// SOL-PERP market. Init once, immutable thereafter (Drift-hack defensive);
+// no admin field by design — no admin instructions exist, ever.
 //
-// `pyth_feed_id` is the 32-byte Pyth feed identifier (NOT a Pubkey of an
-// account). Pyth's `PriceUpdateV2` accounts have unstable addresses (a
-// fresh keypair per update), but each carries a stable feed_id inside. We
-// pin the feed_id at init and validate every passed price_update account
-// against it. For SOL/USD the feed_id is `SOL_USD_FEED_ID` in constants.rs.
+// `pyth_feed_id` is the 32-byte Pyth feed identifier, NOT an account pubkey:
+// PriceUpdateV2 accounts have unstable addresses (fresh keypair per update)
+// but carry a stable feed_id inside. Pinned at init and validated against
+// every price_update account. SOL/USD is SOL_USD_FEED_ID in constants.rs.
 #[account]
 pub struct Market {
     pub pyth_feed_id: [u8; 32],   // locked at init; 32-byte Pyth asset id
@@ -33,12 +32,11 @@ impl Market {
 
 // One encrypted order slot in the batch buffer.
 //
-// max_margin is PUBLIC by design — it's the USDC base-unit amount locked
-// from UserCollateral.balance at submit_order. Refunded on NoMatch; retained
-// on any fill (v0 doesn't refund partial-fill excess because the circuit
-// doesn't reveal original size — only fill_size — so a proportional refund
-// would leak the order size). v0 trusts the user to size max_margin against
-// their own encrypted notional; circuit-side margin validation is v0.2.
+// max_margin is PUBLIC by design — the USDC base-unit amount locked from
+// UserCollateral.balance at submit_order. Refunded on NoMatch, retained on any
+// fill (v0 can't refund partial-fill excess: the circuit reveals fill_size, not
+// original size, so a proportional refund would leak it). v0 trusts the user to
+// size max_margin; circuit-side margin validation is v0.2.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct EncryptedOrderSlot {
     pub owner: Pubkey,            // for fill / refund routing
@@ -55,16 +53,14 @@ impl EncryptedOrderSlot {
     pub const SIZE: usize = 32 + 32 + 16 + 8 + 32 + 32 + 32 + 32;
 }
 
-// Rolling buffer. Reused across batches: process_batch flips is_processing,
-// callback resets n_orders + orders[] and bumps batch_id.
+// Rolling buffer, reused across batches: process_batch flips is_processing,
+// the callback resets n_orders + orders[] and bumps batch_id.
 //
-// is_processing semantics:
-//   false at init and after each callback;
-//   true between process_batch (queue_computation) and the callback firing.
-// While true: submit_order rejects new orders, and process_batch refuses to
-// re-queue (no double-spend of the same encrypted orders). v0 caveat: if
-// Arcium drops the computation the buffer is stuck until manual recovery;
-// timeout / cancel flow is v0.2 work.
+// is_processing is false at init and after each callback, true between
+// process_batch (queue_computation) and the callback firing. While true,
+// submit_order rejects new orders and process_batch refuses to re-queue (no
+// double-spend of the same orders). v0 caveat: if Arcium drops the computation
+// the buffer is stuck until manual recovery; timeout/cancel is v0.2.
 #[account]
 pub struct BatchBuffer {
     pub market: Pubkey,
@@ -96,27 +92,22 @@ impl UserCollateral {
     pub const SIZE: usize = 8 + 32 + 8 + 1;
 }
 
-// Per-user perp position. One per (market, owner). Plain (publicly readable)
-// in v0 — see docs/circuit-v0.md "v0 vs v0.2". Encrypted commitment variant
-// is task #21 / v0.2.
+// Per-user perp position, one per (market, owner). Plain (publicly readable)
+// in v0 — see docs/circuit-v0.md "v0 vs v0.2"; encrypted commitment is v0.2
+// (task #21).
 //
 // Units (v0):
-//   base_amount_lots — signed lots of base (SOL). + long, - short.
-//   quote_entry     — signed cumulative cost basis in lot-ticks
-//                      (sum over fills of ±fill_size_lots * clearing_price_ticks).
-//                      Negative when long (you paid quote), positive when short
-//                      (you received quote). i128 absorbs accumulation across
-//                      many fills without overflow.
-//   margin_locked   — sum of max_margin from every order that has filled into
-//                      this position, in USDC base units. Released back to
-//                      UserCollateral at close. v0 doesn't refund partial-fill
-//                      excess at fill time (would leak order size), so this
-//                      is always the *committed* margin, not the
-//                      *required* margin.
+//   base_amount_lots — signed lots of base (SOL): + long, - short.
+//   quote_entry     — signed cumulative cost basis in lot-ticks (sum over fills
+//                      of ±fill_size_lots * clearing_price_ticks). Negative when
+//                      long, positive when short. i128 absorbs accumulation.
+//   margin_locked   — sum of max_margin from every order filled into this
+//                      position (USDC base units), released at close. Always the
+//                      committed margin, not the required one (v0 doesn't refund
+//                      partial-fill excess — would leak size).
 //
-// Unit convention (v0): lot-ticks treated 1:1 with USDC base units. Position
-// PnL = base_amount_lots * exit_price + quote_entry is therefore directly
-// comparable to margin_locked (both u64-scale-equivalent). Real
+// lot-ticks are treated 1:1 with USDC base units, so PnL = base_amount_lots *
+// exit_price + quote_entry is directly comparable to margin_locked. Real
 // TICK_SIZE/LOT_SIZE calibration is post-v0.
 #[account]
 pub struct Position {

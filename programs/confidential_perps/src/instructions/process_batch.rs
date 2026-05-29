@@ -1,10 +1,9 @@
 // process_batch — closes the open batch window and queues match_batch in
-// Arcium. Permissionless: anyone can trigger once the gates are satisfied
-// (n_orders == 2, window closed, not already in flight). Pays Arcium fees
-// via `payer`.
+// Arcium. Permissionless: anyone can trigger once the gates pass (n_orders == 2,
+// window closed, not already in flight); pays Arcium fees via `payer`.
 //
-// v0 only handles exactly 2 orders per batch (circuit-imposed). The
-// 1-order / 0-order / 1-side timeout-refund flows are v0.2.
+// v0 handles exactly 2 orders per batch (circuit-imposed); 1-order / 0-order /
+// timeout-refund flows are v0.2.
 use crate::{
     constants::{
         BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, POSITION_SEED,
@@ -61,7 +60,7 @@ pub struct ProcessBatch<'info> {
     #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
     pub clock_account: Account<'info, ClockAccount>,
 
-    // -- our domain accounts --
+    // our domain accounts
 
     #[account(
         seeds = [MARKET_SEED],
@@ -76,12 +75,10 @@ pub struct ProcessBatch<'info> {
     )]
     pub batch_buffer: Box<Account<'info, BatchBuffer>>,
 
-    /// CHECK: validated as a Pyth PriceUpdateV2 in handler via
-    /// `read_pyth_price` — owner check (Pyth receiver), discriminator,
-    /// Full verification, feed_id, freshness, sign, confidence. We use
-    /// UncheckedAccount because `Account<'info, PriceUpdateV2>` from
-    /// pyth-solana-receiver-sdk requires anchor-lang ^0.32.1; Arcium pins
-    /// us to 1.0.2 so we hand-roll the struct in src/pyth.rs.
+    /// CHECK: validated as a Pyth PriceUpdateV2 in the handler via
+    /// `read_pyth_price`. UncheckedAccount because the SDK's typed
+    /// Account<PriceUpdateV2> needs anchor-lang ^0.32.1 (Arcium pins us to
+    /// 1.0.2); we hand-roll the struct in src/pyth.rs.
     pub price_update: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
@@ -104,8 +101,8 @@ pub fn process_batch_handler(
     )?;
 
     require!(!buf.is_processing, ErrorCode::BatchAlreadyProcessing);
-    // v0: exactly 2 orders. (The circuit signature has fixed arity; see
-    // encrypted-ixs/src/lib.rs match_batch.)
+    // v0: exactly 2 orders — the circuit has fixed arity (see
+    // encrypted-ixs/src/lib.rs match_batch).
     require!(buf.n_orders == 2, ErrorCode::BatchNotReady);
 
     let now_slot = Clock::get()?.slot;

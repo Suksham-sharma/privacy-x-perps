@@ -2,23 +2,20 @@
 //
 // Two jobs run on a poll loop:
 //   1. Batch cranker — when BatchBuffer has 2 orders + window closed +
-//      !is_processing, call process_batch. process_batch is
-//      permissionless, so anyone signing as `payer` can crank it.
-//   2. Liquidator — list every open Position, read current Pyth price,
-//      compute credit = margin + base*price + quote. If
-//      credit < margin/2 (50% maintenance), call liquidate_position.
+//      !is_processing, call (permissionless) process_batch as `payer`.
+//   2. Liquidator — for each open Position, read the Pyth price, compute
+//      credit = margin + base*price + quote, and call liquidate_position when
+//      credit < margin/2 (50% maintenance).
 //
-// Run (workspace root):
-//   pnpm --filter @confidential-perps/keeper start
+// Run (workspace root):  pnpm --filter @confidential-perps/keeper start
 //
 // Env:
 //   SOLANA_RPC_URL          (default http://localhost:8899)
 //   ANCHOR_WALLET           (default ~/.config/solana/id.json)
-//   ARCIUM_CLUSTER_OFFSET   (default 0 — localnet; use 456 for devnet)
-//   PYTH_PRICE_UPDATE       (default 7UVimff... — SOL/USD sponsored feed)
+//   ARCIUM_CLUSTER_OFFSET   (default 0 — localnet; 456 for devnet)
+//   PYTH_PRICE_UPDATE       (default 7UVimff… — SOL/USD sponsored feed)
 //   KEEPER_INTERVAL_MS      (default 3000)
-//   KEEPER_ONCE             (truthy → run a single cycle and exit;
-//                            useful for tests / cron-style invocation)
+//   KEEPER_ONCE             (truthy → run one cycle and exit; for tests/cron)
 
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import * as anchor from "@anchor-lang/core";

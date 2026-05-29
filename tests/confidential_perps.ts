@@ -28,7 +28,6 @@ import * as os from "os";
 import { expect } from "chai";
 
 describe("ConfidentialPerps", () => {
-  // Configure the client to use the local cluster.
   anchor.setProvider(anchor.AnchorProvider.env());
   const program = anchor.workspace
     .ConfidentialPerps as Program<ConfidentialPerps>;

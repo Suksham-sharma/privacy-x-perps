@@ -1,16 +1,13 @@
-// close_position — user-initiated exit. Reads the current Pyth price and
-// uses it as the exit price; the user does NOT supply a price. Releases
-// margin + realized PnL back to UserCollateral and zeros the Position.
+// close_position — user-initiated exit. Reads the current Pyth price as the
+// exit price (the user does NOT supply one), then releases margin + realized
+// PnL back to UserCollateral and zeros the Position.
 //
-// Why no user-supplied exit_price (Codex review fix): the protocol has no
-// counterparty for the exit, so any caller-chosen exit inside a price band
-// is free optionality — a long picks the top of the band, a short picks
-// the bottom, a liquidator picks the worst value for the victim. Settling
-// at the oracle directly removes that surface entirely. Liquidate is the
-// same pattern (see liquidate_position.rs).
+// No user-supplied exit_price (Codex review fix): with no exit counterparty, a
+// caller-chosen price inside a band is free optionality — a long picks the top,
+// a short the bottom, a liquidator the worst value for the victim. Settling at
+// the oracle removes that surface. liquidate_position.rs is the same pattern.
 //
-// PnL formula (v0, lot-ticks treated 1:1 with USDC base units — see the
-// Position doc comment in state/mod.rs):
+// PnL (v0, lot-ticks 1:1 with USDC base units — see Position in state/mod.rs):
 //   realized_pnl = base_amount_lots * oracle_price + quote_entry
 //   credit       = margin_locked + realized_pnl
 // If credit < 0 the position can't self-close — goes through liquidation.

@@ -11,11 +11,14 @@ build
 encrypted-ixs/src/main.rs
 artifacts/
 
-# Local progress log — not for the public repo.
+# Local-only docs & design notes — kept on disk, not for the public repo.
 JOURNAL.md
+/DESIGN.md
+/HANDOVER.md
+/docs/TRADE-SCREEN-HANDOVER.md
 
-# Raw generated design source (multi-MB) — the optimized app/public/guilloche.webp is what ships.
-design/ref-guilloche-gemini.png
+# Design source & mockups — the optimized app/public/guilloche.webp is what ships.
+/design/
 
 # Secrets (NEVER commit)
 .env

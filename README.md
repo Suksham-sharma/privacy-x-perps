@@ -4,7 +4,7 @@ The first confidential perpetual futures DEX on Solana ("confidential perps"). O
 client-side, matched in Arcium's MPC network, settled on-chain via Anchor. Like an iceberg order,
 your size stays below the surface — only here nothing shows pre-match at all.
 
-Devnet only for now. SIF cohort build — see `HANDOVER.md` and `JOURNAL.md`.
+Devnet only for now. SIF cohort build.
 
 ## Quickstart
 
@@ -31,7 +31,7 @@ pnpm test:keygen     # alias for: arcium test
 | `tests/` | TypeScript integration tests |
 | `sdk/` | Client SDK (wraps the IDL + encryption + PDA derivation) |
 | `keeper/` | Liquidation keeper bot |
-| `docs/` | Design notes (`circuit-v0.md` is the matching engine spec) |
+| `docs/circuit-v0.md` | Matching engine spec |
 | `Arcium.toml` | Localnet and MXE cluster config |
 | `Anchor.toml` | Solana cluster + provider config |
 

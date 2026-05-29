@@ -1,8 +1,8 @@
 use arcis::*;
 
-// add_together — kept as a toolchain canary. tests/confidential_perps.ts
-// drives it end-to-end on localnet to prove the MXE keygen + queue +
-// callback pipeline works in isolation, independent of our matching logic.
+// add_together — a toolchain canary. tests/confidential_perps.ts drives it
+// end-to-end to prove the MXE keygen + queue + callback pipeline works in
+// isolation, independent of our matching logic.
 
 #[encrypted]
 mod toolchain_canary {
@@ -24,29 +24,25 @@ mod toolchain_canary {
 // match_batch v0 — two-order uniform-price match.
 //
 // Privacy model (v0 — see docs/circuit-v0.md "v0 vs v0.2"):
-//   - ORDERS are encrypted during matching — the moat. MPC sees plaintext
-//     only inside the circuit; no individual node sees an order's contents.
-//     This prevents pre-trade leakage (front-running, strategy copying).
-//   - FILLS are revealed publicly via .reveal(). The callback applies each
-//     fill to UserCollateral / Position directly. Same model as a dark pool
-//     that prints fills to the tape post-trade.
-//   - Why this isn't a privacy regression vs encrypted-fill (Path B): in
-//     v0 the on-chain UserCollateral and Position PDAs are public, so any
-//     fill leaks its size through state deltas regardless of whether the
-//     fill *instruction* was encrypted. Hash-commit fill delivery only
-//     becomes a real privacy primitive once Position is encrypted (task
-//     #21) — that's v0.2.
+//   - ORDERS are encrypted during matching — the moat. MPC sees plaintext only
+//     inside the circuit; no node sees an order's contents, preventing
+//     pre-trade leakage (front-running, strategy copying).
+//   - FILLS are revealed publicly via .reveal(); the callback applies each to
+//     UserCollateral / Position. Like a dark pool printing fills to the tape
+//     post-trade.
+//   - Not a regression vs encrypted-fill (Path B): v0's UserCollateral and
+//     Position PDAs are public, so a fill leaks its size through state deltas
+//     regardless of whether the instruction was encrypted. Hash-commit fill
+//     delivery only matters once Position is encrypted (v0.2, task #21).
 //
 // Outputs (all PUBLIC, revealed via Struct{..}.reveal()):
 //   clearing_price — matched price; 0 if no match.
-//   total_volume   — sum of all fills; equals fill_a_size in v0 since the
-//                    two sides must trade the same lots.
+//   total_volume   — sum of fills; equals fill_a_size in v0 (both sides trade
+//                    the same lots).
 //   fill_a_size    — lots filled for input a (0 if no match).
 //   fill_a_side    — 0 long / 1 short, copied through.
-//   fill_b_size    — same for b.
-//   fill_b_side    — same for b.
-// The on-chain callback applies fill_a to BatchBuffer.orders[0].owner
-// and fill_b to BatchBuffer.orders[1].owner.
+//   fill_b_size/side — same for b.
+// The callback applies fill_a to orders[0].owner and fill_b to orders[1].owner.
 
 #[encrypted]
 mod circuits {

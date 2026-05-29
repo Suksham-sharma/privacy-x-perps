@@ -1,19 +1,16 @@
-// Devnet bootstrap: post-deploy init for the perp engine.
-//
-// Run AFTER `arcium deploy --cluster-offset 456 ... --rpc-url devnet`
-// succeeds. Idempotent — re-running skips already-initialized accounts.
+// Devnet bootstrap: post-deploy init for the perp engine. Run AFTER
+// `arcium deploy --cluster-offset 456 ... --rpc-url devnet` succeeds.
+// Idempotent — re-running skips already-initialized accounts.
 //
 //   pnpm exec ts-node scripts/devnet-init.ts
 //
-// Does the work tests/matching.ts does in its `init` describe block:
-//   1. Create a fresh USDC mint (we control mint authority; canonical
-//      4zMMC9... is Circle-owned and we can't mint to ourselves).
-//   2. init_market(SOL_USD_FEED_ID, usdcMint) — creates Market + BatchBuffer
-//      + USDC vault ATA owned by the Market PDA.
-//   3. init_match_batch_comp_def — registers the match_batch circuit with
-//      the MXE so process_batch can queue computations.
-//   4. uploadCircuit — pushes the compiled match_batch.arcis bytes to
-//      Arcium.
+// Mirrors tests/matching.ts's `init` block:
+//   1. Create a fresh USDC mint (we control its authority; canonical 4zMMC9…
+//      is Circle-owned, so we can't mint to ourselves).
+//   2. init_market — creates Market + BatchBuffer + USDC vault ATA.
+//   3. init_match_batch_comp_def — registers the match_batch circuit with the
+//      MXE so process_batch can queue computations.
+//   4. uploadCircuit — pushes the compiled match_batch.arcis to Arcium.
 
 import * as anchor from "@anchor-lang/core";
 import { Program } from "@anchor-lang/core";

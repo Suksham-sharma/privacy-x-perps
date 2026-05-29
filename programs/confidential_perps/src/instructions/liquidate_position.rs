@@ -1,18 +1,16 @@
-// liquidate_position — third-party close when a position can no longer
-// cover its maintenance margin. Permissionless: anyone with a Solana
-// keypair can call once the gate is satisfied. v0 has no liquidator bounty
-// (kept simple for demo; bounty + insurance fund are v0.2 work).
+// liquidate_position — third-party close when a position can't cover its
+// maintenance margin. Permissionless: anyone can call once the gate passes.
+// v0 has no liquidator bounty (bounty + insurance fund are v0.2).
 //
-// Exit price comes from Pyth, not from the liquidator (Codex review fix).
-// Caller-supplied exit_price inside a ±band gives the liquidator free
-// optionality — they'd pick the value most punitive to the victim. Reading
-// Pyth directly removes that surface; the liquidator's only choice is
-// whether/when to call.
+// Exit price comes from Pyth, not the liquidator (Codex review fix): a
+// caller-supplied price inside a band is free optionality to pick the value
+// most punitive to the victim. The liquidator's only choice is whether/when to
+// call. Same pattern as close_position.rs.
 //
-// Liquidatable when credit < margin_locked / 2 (50% maintenance margin):
+// Liquidatable when credit < margin_locked / 2 (50% maintenance):
 //   credit = margin_locked + PnL
 //   PnL    = base_amount_lots * pyth_price + quote_entry
-// Any positive residual credit goes to the position owner; v0 takes no fee.
+// Any positive residual credit goes to the owner; v0 takes no fee.
 use crate::{
     constants::{MARKET_SEED, POSITION_SEED, USER_COLLATERAL_SEED},
     error::ErrorCode,

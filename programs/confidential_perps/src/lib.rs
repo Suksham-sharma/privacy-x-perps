@@ -40,8 +40,6 @@ pub mod confidential_perps {
         add_together::add_together_callback_handler(ctx, output)
     }
 
-    // -- SOL-PERP matching --
-
     pub fn init_market(
         ctx: Context<InitMarket>,
         pyth_feed_id: [u8; 32],
@@ -71,8 +69,6 @@ pub mod confidential_perps {
         )
     }
 
-    // -- match_batch comp def init (one-time deploy step) --
-
     pub fn init_match_batch_comp_def(ctx: Context<InitMatchBatchCompDef>) -> Result<()> {
         match_batch::init_match_batch_comp_def_handler(ctx)
     }
@@ -91,8 +87,6 @@ pub mod confidential_perps {
     ) -> Result<()> {
         match_batch::match_batch_callback_handler(ctx, output)
     }
-
-    // -- collateral --
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         deposit::deposit_handler(ctx, amount)

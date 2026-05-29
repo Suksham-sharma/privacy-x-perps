@@ -19,7 +19,6 @@ const MICRO = "iceberg · confidential perps · ".repeat(40);
 export default function Home() {
   return (
     <>
-      {/* icon sprite */}
       <svg width={0} height={0} style={{ position: "absolute" }} aria-hidden>
         <defs>
           <symbol id="i-key" viewBox="0 0 24 24">
@@ -48,14 +47,12 @@ export default function Home() {
 
       <SiteNav />
 
-      {/* HERO — centered manifesto */}
       <section className="relative flex min-h-[88vh] flex-col overflow-hidden">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 z-0 bg-[url(/guilloche.webp)] bg-cover bg-center bg-no-repeat opacity-[0.15] mix-blend-multiply [mask-image:radial-gradient(72%_80%_at_50%_46%,#000_16%,transparent_82%)]"
         />
         <div className="relative z-[1] mx-auto flex w-full max-w-[1160px] flex-1 flex-col px-8 pt-16 pb-16">
-          {/* centered: kicker + headline */}
           <div className="flex flex-1 flex-col items-center justify-center text-center">
             <span className="flex items-center gap-4">
               <span className="h-px w-14 bg-line-2" />
@@ -74,7 +71,6 @@ export default function Home() {
               </span>
             </h1>
           </div>
-          {/* default alignment: subhead + CTAs */}
           <div className="flex items-end justify-between gap-12 pt-12 max-[880px]:flex-col max-[880px]:items-start max-[880px]:gap-8">
             <p className="max-w-[42ch] text-[17px] leading-[1.6] text-ink-2">
               Orders encrypted in your browser, matched inside{" "}
@@ -101,7 +97,6 @@ export default function Home() {
         <div className="microprint">{MICRO}</div>
       </div>
 
-      {/* TERMINAL */}
       <section className="block" id="terminal" style={{ paddingTop: "56px" }}>
         <div className="wrap">
           <div className="sec-head">
@@ -274,7 +269,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* LIFECYCLE */}
       <section className="block" id="how">
         <div className="wrap">
           <div className="sec-head">
@@ -341,7 +335,6 @@ export default function Home() {
         <div className="microprint">{MICRO}</div>
       </div>
 
-      {/* COMPARE */}
       <section className="block" id="compare">
         <div className="wrap">
           <div className="sec-head">
@@ -417,7 +410,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ */}
       <section className="block" id="faq" style={{ paddingTop: "40px" }}>
         <div className="wrap">
           <div className="sec-head">
@@ -432,7 +424,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="cta-cert">
         <div className="wrap">
           <div className="cert">
@@ -475,7 +466,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FOOTER */}
       <footer>
         <div className="wrap">
           <div className="foot-grid">

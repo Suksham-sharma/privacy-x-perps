@@ -11,7 +11,6 @@ pub enum ErrorCode {
     #[msg("The computation was aborted")]
     AbortedComputation,
 
-    // -- domain errors --
     #[msg("Batch buffer is full")]
     BatchFull,
     #[msg("Batch window has closed")]
