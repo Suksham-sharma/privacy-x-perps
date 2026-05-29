@@ -1,4 +1,5 @@
 pub mod add_together;
+pub mod cancel_order;
 pub mod close_position;
 pub mod deposit;
 pub mod init_market;
@@ -9,6 +10,7 @@ pub mod submit_order;
 pub mod withdraw;
 
 pub use add_together::*;
+pub use cancel_order::*;
 pub use close_position::*;
 pub use deposit::*;
 pub use init_market::*;

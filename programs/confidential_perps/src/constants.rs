@@ -55,8 +55,12 @@ pub const BPS_DENOMINATOR: u64 = 10_000;
 // Batch auction params. Tune in Week 3 once we measure ACUs.
 pub const MAX_ORDERS: usize = 8;
 
-// ~2s window on mainnet (400 ms slots).
-pub const DEFAULT_BATCH_WINDOW_SLOTS: u64 = 5;
+// Batch window. 5 slots (~2s) is fine for the tight back-to-back submits in the
+// test/lifecycle-driver, but unusable for a human-paced UI where one side is
+// placed in the browser and the other arrives moments later — a lone order whose
+// window closes before a match bricks the buffer (no cancel/reset in v0). 50
+// slots (~20s) gives the /trade flow comfortable room. Mainnet would tune this.
+pub const DEFAULT_BATCH_WINDOW_SLOTS: u64 = 50;
 
 // Pyth oracle band: clearing price must be within ±5% of the spot.
 pub const ORACLE_BAND_BPS: u64 = 500;

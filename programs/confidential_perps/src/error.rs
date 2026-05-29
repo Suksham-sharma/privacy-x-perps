@@ -21,6 +21,8 @@ pub enum ErrorCode {
     BatchEmpty,
     #[msg("Batch is not ready to process (v0 requires exactly 2 orders)")]
     BatchNotReady,
+    #[msg("No pending order for this user in the current batch")]
+    NoPendingOrder,
     #[msg("Batch is already being processed (computation in flight)")]
     BatchAlreadyProcessing,
     #[msg("No open position to close")]

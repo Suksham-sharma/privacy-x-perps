@@ -96,6 +96,10 @@ pub mod confidential_perps {
         withdraw::withdraw_handler(ctx, amount)
     }
 
+    pub fn cancel_order(ctx: Context<CancelOrder>) -> Result<()> {
+        cancel_order::cancel_order_handler(ctx)
+    }
+
     pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         close_position::close_position_handler(ctx)
     }
