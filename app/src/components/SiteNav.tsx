@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { IcebergMark } from "./IcebergMark";
 
 export function SiteNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -16,9 +17,9 @@ export function SiteNav() {
     <header className={scrolled ? "scrolled" : undefined}>
       <div className="wrap nav">
         <a href="#" className="brand">
-          <span className="mark" />
+          <IcebergMark size={28} className="mark" />
           <span className="name">
-            Confidential <em>Perps</em>
+            Ice<em>berg</em>
           </span>
         </a>
         <nav className="nav-links">
@@ -28,9 +29,6 @@ export function SiteNav() {
           <a href="#faq">FAQ</a>
         </nav>
         <div className="nav-cta">
-          <a href="#" className="nav-links" style={{ display: "flex" }}>
-            <span>Docs</span>
-          </a>
           <a href="/trade" className="btn btn-accent btn-sm">
             Launch Terminal{" "}
             <svg className="ic arrow">

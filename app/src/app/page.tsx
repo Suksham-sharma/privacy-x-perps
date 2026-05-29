@@ -1,18 +1,20 @@
 import { SiteNav } from "@/components/SiteNav";
 import { Faq } from "@/components/Faq";
+import { IcebergMark } from "@/components/IcebergMark";
+import { IcebergSeal } from "@/components/IcebergSeal";
 
 function Strip() {
   return (
     <span>
       <span className="dot">◆</span> NOW TRADING · SOL-PERP <span className="dot">◆</span>{" "}
-      ENCRYPTED CLIENT-SIDE <span className="dot">◆</span> MATCHED IN MPC{" "}
+      ENCRYPTED CLIENT-SIDE <span className="dot">◆</span> MATCHED IN ARCIUM MPC{" "}
       <span className="dot">◆</span> SETTLED ON SOLANA <span className="dot">◆</span>{" "}
       PRIVATE TRADES · PUBLIC PROOFS{" "}
     </span>
   );
 }
 
-const MICRO = "confidential·perps·".repeat(60);
+const MICRO = "iceberg · confidential perps · ".repeat(40);
 
 export default function Home() {
   return (
@@ -50,7 +52,7 @@ export default function Home() {
       <section className="relative flex min-h-[88vh] flex-col overflow-hidden">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 z-0 bg-[url(/cperps-guilloche.png)] bg-cover bg-center bg-no-repeat opacity-[0.15] mix-blend-multiply [mask-image:radial-gradient(72%_80%_at_50%_46%,#000_16%,transparent_82%)]"
+          className="pointer-events-none absolute inset-0 z-0 bg-[url(/guilloche.webp)] bg-cover bg-center bg-no-repeat opacity-[0.15] mix-blend-multiply [mask-image:radial-gradient(72%_80%_at_50%_46%,#000_16%,transparent_82%)]"
         />
         <div className="relative z-[1] mx-auto flex w-full max-w-[1160px] flex-1 flex-col px-8 pt-16 pb-16">
           {/* centered: kicker + headline */}
@@ -75,9 +77,9 @@ export default function Home() {
           {/* default alignment: subhead + CTAs */}
           <div className="flex items-end justify-between gap-12 pt-12 max-[880px]:flex-col max-[880px]:items-start max-[880px]:gap-8">
             <p className="max-w-[42ch] text-[17px] leading-[1.6] text-ink-2">
-              Orders encrypted in your browser, matched inside an{" "}
-              <b className="font-semibold text-ink">MPC</b> network, settled
-              on-chain. Your size is sealed —{" "}
+              Orders encrypted in your browser, matched inside{" "}
+              <b className="font-semibold text-ink">Arcium&apos;s MPC</b> network,
+              settled on-chain. Your size is sealed —{" "}
               <b className="font-semibold text-ink">even from us</b>.
             </p>
             <div className="flex shrink-0 flex-wrap gap-4">
@@ -88,7 +90,7 @@ export default function Home() {
                 </svg>
               </a>
               <a href="#how" className="btn btn-lg">
-                Read the brief
+                How it works
               </a>
             </div>
           </div>
@@ -360,7 +362,7 @@ export default function Home() {
                 <tr>
                   <th style={{ width: "46%" }}>Capability</th>
                   <th>Typical Perp DEX</th>
-                  <th className="us">Confidential Perps</th>
+                  <th className="us">Iceberg</th>
                 </tr>
               </thead>
               <tbody>
@@ -370,10 +372,7 @@ export default function Home() {
                     <span className="x">●</span> Fully public
                   </td>
                   <td className="us">
-                    <svg className="ic" style={{ color: "var(--accent)" }}>
-                      <use href="#i-lock" />
-                    </svg>{" "}
-                    Encrypted
+                    <span className="ok">✓</span> Encrypted
                   </td>
                 </tr>
                 <tr>
@@ -442,7 +441,7 @@ export default function Home() {
               <span className="corner tr" />
               <span className="corner bl" />
               <span className="corner br" />
-              <div className="kicker">Confidential Perps · Bearer Access</div>
+              <div className="kicker">Iceberg · Bearer Access</div>
               <div className="orn">✦ ✦ ✦</div>
               <h2>
                 Trade in the dark.
@@ -460,8 +459,8 @@ export default function Home() {
                     <use href="#i-arrow" />
                   </svg>
                 </a>
-                <a href="#" className="btn btn-lg">
-                  Read the docs
+                <a href="#how" className="btn btn-lg">
+                  How it works
                 </a>
               </div>
               <div className="seal-row">
@@ -482,45 +481,41 @@ export default function Home() {
           <div className="foot-grid">
             <div className="foot-brand">
               <a href="#" className="brand">
-                <span className="mark" />
+                <IcebergMark size={28} className="mark" />
                 <span className="name">
-                  Confidential <em>Perps</em>
+                  Ice<em>berg</em>
                 </span>
               </a>
               <p>
-                The first confidential perpetuals exchange on Solana. Private size,
-                public settlement.
+                The first confidential perpetuals exchange on Solana. Orders are
+                matched inside Arcium&apos;s MPC network — your size stays sealed,
+                settlement stays public.
               </p>
               <div className="foot-seal-wrap">
-                <div className="foot-seal" />
+                <IcebergSeal size={104} />
                 <span className="foot-seal-cap">Issued · Solana Devnet · MMXXVI</span>
               </div>
             </div>
             <div className="foot-col">
-              <h4>Protocol</h4>
+              <h4>Explore</h4>
               <a href="/trade">Launch Terminal</a>
               <a href="#how">Lifecycle</a>
-              <a href="#privacy">Privacy model</a>
               <a href="#compare">Compare</a>
+              <a href="#faq">FAQ</a>
             </div>
             <div className="foot-col">
-              <h4>Developers</h4>
-              <a href="#">Documentation</a>
-              <a href="#">TypeScript SDK</a>
-              <a href="#">GitHub</a>
-              <a href="#">Arcium</a>
-            </div>
-            <div className="foot-col">
-              <h4>Community</h4>
-              <a href="#">X / Twitter</a>
-              <a href="#">Discord</a>
-              <a href="#">Mirror</a>
-              <a href="#">Brand kit</a>
+              <h4>Built with</h4>
+              <a href="https://solana.com" target="_blank" rel="noreferrer">
+                Solana
+              </a>
+              <a href="https://www.arcium.com" target="_blank" rel="noreferrer">
+                Arcium MPC
+              </a>
             </div>
           </div>
           <div className="foot-bottom">
-            <span>© 2026 Confidential Perps — Devnet release</span>
-            <span>Encrypted client-side · Matched in MPC · Settled on Solana</span>
+            <span>© 2026 Iceberg — Solana Devnet</span>
+            <span>Solana × Arcium MPC · Encrypted client-side · Settled on-chain</span>
           </div>
         </div>
       </footer>

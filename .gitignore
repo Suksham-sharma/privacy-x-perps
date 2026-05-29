@@ -14,6 +14,9 @@ artifacts/
 # Local progress log — not for the public repo.
 JOURNAL.md
 
+# Raw generated design source (multi-MB) — the optimized app/public/guilloche.webp is what ships.
+design/ref-guilloche-gemini.png
+
 # Secrets (NEVER commit)
 .env
 .env.local

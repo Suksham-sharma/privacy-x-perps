@@ -1,7 +1,11 @@
-# Confidential Perps — Design System
+# Iceberg — Design System
 
-**Codename: "Declassified."** Source of truth for the marketing site and the `/trade` app.
-Reference mockup: [`design/landing-mockup.html`](design/landing-mockup.html). Live build: `app/` (Next.js 16).
+**Product name (locked): Iceberg.** "Confidential perps" is the category descriptor, not the
+name. *Iceberg order* = the TradFi term for an order whose true size sits hidden below the
+surface — only the tip shows. We go further: nothing shows pre-match (the whole berg is
+submerged). **Codename: "Declassified."** Source of truth for the marketing site and the
+`/trade` app. Reference mockup: [`design/landing-mockup.html`](design/landing-mockup.html).
+Live build: `app/` (Next.js 16).
 
 **Tagline (locked):** *Private trades, public proofs.* — hero kicker *Privacy × Perps · Solana Devnet*.
 
@@ -102,9 +106,13 @@ mono labels `9–11px` uppercase, `0.12–0.18em` tracking.
 
 ## 8. Assets
 
-- `design/cperps-guilloche.png` — guilloché security pattern (hero watermark). **Optimize/resize
-  before shipping** (currently ~13MB; target a web-sized WebP into `app/public/`).
-- `design/cperps-seal.png` — square crop of one medallion, masked to a circle in CSS for the seal.
+- `app/public/guilloche.webp` — guilloché security pattern (hero watermark + seal fill).
+  Optimized from the Gemini source (`design/ref-guilloche-gemini.png`, ~11.7MB) → **118KB**
+  WebP via `cwebp -q 42 -resize 800 0`. Used at `multiply` blend so the white ground drops out
+  on paper; low opacity, so the resolution drop is invisible. Regenerate from the source if a
+  higher-fidelity crop is ever needed.
+- The footer / certificate seal is a **component** (`IcebergSeal`), not a baked PNG — a circular
+  guilloché crop + double ring + the berg centered.
 
 ## 9. Tailwind mapping (`theme.extend`)
 
@@ -145,3 +153,23 @@ hairlines) over a centered Fraunces headline *Private trades, public proofs.* (`
 accent-italic, `proofs.` ink-outlined); subhead + CTAs in the default left/right split beneath;
 guilloché as a centered watermark band. The standalone Privacy-ledger section was cut from the
 page (the redaction motif still lives in the hero treatment + the terminal orderbook).
+
+## 10. Brand mark & icon
+
+The mark is a **faceted iceberg**: a wireframe tip above the waterline (the visible "plaintext"
+slice) over a solid mass below (the sealed/redacted bulk). Tiny tip, large submerged mass — the
+proportion *is* the thesis. Origin: a Gemini-generated vector master (`design/ref-iceberg-gemini.svg`),
+cropped to the berg bbox (viewBox `333 91 380 380`) and recolored to `currentColor` so it themes
+to ink / paper / accent for free.
+
+- **`IcebergMark`** (`app/src/components/IcebergMark.tsx`) — the full faceted berg, inline SVG,
+  `fill="currentColor"`, `size` prop. Used in the nav + footer brand and inside the seal. Path
+  data is generated from the source SVG — regenerate, don't hand-edit.
+- **`IcebergSeal`** (`app/src/components/IcebergSeal.tsx`) — circular medallion: guilloché crop
+  (`multiply`) + double ring + centered berg; `accent` variant swaps the ring to ink-blue.
+- **Favicon** (`app/src/app/icon.svg`, Next file convention) — a **simplified-tip** berg (solid
+  mass + a single solid triangle tip, no fine facets) so it stays crisp at 16px where the
+  wireframe slivers would mush. Includes a `prefers-color-scheme: dark` fill swap.
+- **Wordmark** — *Iceberg* in **Fraunces, italic, title case**, with *berg* in `--accent`.
+  Renders `Ice<em>berg</em>` via `.brand .name` (whole name italic; `em` = accent). Echoes the
+  hero headline's italic-accent treatment rather than the colder mono caps it replaced.

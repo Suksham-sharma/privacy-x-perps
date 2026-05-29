@@ -23,9 +23,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Confidential Perps — Private trades, public proofs.",
+  title: "Iceberg — Private trades, public proofs.",
   description:
-    "The first confidential perpetuals exchange on Solana. Orders are encrypted client-side, matched inside an MPC network, and settled on-chain. Your position size stays private — even from us.",
+    "Iceberg is the first confidential perpetuals exchange on Solana. Orders are encrypted client-side, matched inside an MPC network, and settled on-chain. Your position size stays private — even from us.",
 };
 
 export default function RootLayout({

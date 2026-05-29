@@ -17,7 +17,7 @@ const ITEMS: { q: string; a: string }[] = [
   },
   {
     q: "What chain and assets are supported?",
-    a: "Confidential Perps runs on Solana. The launch market is SOL-PERP with USDC collateral. More markets follow once the core is proven on devnet and mainnet-beta.",
+    a: "Iceberg runs on Solana. The launch market is SOL-PERP with USDC collateral. More markets follow once the core is proven on devnet and mainnet-beta.",
   },
   {
     q: "Is it live today?",

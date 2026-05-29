@@ -1,7 +1,8 @@
-# confidential-perps
+# Iceberg
 
-The first confidential perpetual futures DEX on Solana. Orders encrypted client-side,
-matched in Arcium's MPC network, settled on-chain via Anchor.
+The first confidential perpetual futures DEX on Solana ("confidential perps"). Orders encrypted
+client-side, matched in Arcium's MPC network, settled on-chain via Anchor. Like an iceberg order,
+your size stays below the surface — only here nothing shows pre-match at all.
 
 Devnet only for now. SIF cohort build — see `HANDOVER.md` and `JOURNAL.md`.
 

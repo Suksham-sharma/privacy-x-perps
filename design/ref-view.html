@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gemini references — in palette</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#F2EEE4;--paper-2:#EBE6D9;--card:#FBFAF5;--ink:#1A1815;--muted:#736D5F;--line:rgba(26,24,21,.14);--accent:#2438DE;--serif:'Fraunces',serif;--sans:'Archivo',sans-serif;--mono:'IBM Plex Mono',monospace;--doc:10px 10px 0 rgba(26,24,21,.07)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;padding-bottom:80px}
+  .strip{background:var(--ink);color:var(--paper);font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;padding:9px 32px;display:flex;justify-content:space-between}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px}
+  h2{font-family:var(--serif);font-weight:500;font-size:30px;letter-spacing:-.02em;margin:46px 0 6px}
+  .kick{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:42px}
+  .note{font-size:13.5px;color:#45413A;max-width:720px;line-height:1.5;margin-top:8px}
+  .panel{border:1.5px solid var(--ink);box-shadow:var(--doc);border-radius:3px;margin-top:22px;background:var(--card);overflow:hidden}
+  .stageP{display:flex;align-items:center;justify-content:center;padding:30px;min-height:230px}
+  .stageD{background:var(--ink);display:flex;align-items:center;justify-content:center;gap:34px;padding:30px}
+  .ladder{display:flex;gap:20px;align-items:flex-end;justify-content:center;flex-wrap:wrap;padding:26px;border-top:1.5px solid var(--ink);background:var(--paper-2)}
+  .ladder .px{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .ladder .px span{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--muted)}
+  .chip{background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+  /* hero band */
+  .hero{position:relative;background:var(--paper);border:1.5px solid var(--ink);box-shadow:var(--doc);border-radius:3px;margin-top:22px;overflow:hidden;min-height:260px;display:flex;align-items:center;justify-content:center}
+  .hero .gband{position:absolute;inset:0;background:url('ref-guilloche-gemini.png') center/cover no-repeat;mix-blend-mode:multiply;opacity:.16;filter:grayscale(1)}
+  .hero .htext{position:relative;text-align:center;padding:30px}
+  .hero h1{font-family:var(--serif);font-weight:500;font-size:46px;letter-spacing:-.02em;line-height:1}
+  .hero h1 em{font-style:italic;color:var(--accent)}
+  .hero .sub{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:14px}
+  /* seal */
+  .sealrow{display:flex;gap:50px;justify-content:center;align-items:center;padding:36px;flex-wrap:wrap}
+  .seal{position:relative;width:170px;height:170px;border-radius:50%;border:1.6px solid var(--ink);box-shadow:0 0 0 5px var(--paper),0 0 0 6.5px var(--ink);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--card)}
+  .seal .gfill{position:absolute;inset:0;background:url('ref-guilloche-gemini.png') center/180% no-repeat;mix-blend-mode:multiply;opacity:.5;filter:grayscale(1)}
+  .seal .berg{position:relative}
+  .cap{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:center;margin-top:14px}
+  .col{display:flex;flex-direction:column;align-items:center}
+</style>
+</head>
+<body>
+<div class="strip"><span>Reference Intake</span><span>Gemini SVG + Guilloché · in palette</span><span>Iceberg · Confidential Perps</span></div>
+<div class="wrap">
+
+  <div class="kick">Asset 01 · Gemini iceberg (vector) — cropped + recolored to ink</div>
+  <h2>The berg, in palette.</h2>
+  <p class="note">Gemini's SVG, viewBox cropped to the berg and fills swapped from <code>#000000</code> to your ink token <code>#1A1815</code>. This is the actual vector — recolorable (ink / accent / reversed) and crisp at every size below.</p>
+  <div class="panel">
+    <div class="stageP" id="big"></div>
+    <div class="ladder" id="ladder"></div>
+    <div class="stageD" id="dark"></div>
+  </div>
+
+  <div class="kick">Asset 02 · Guilloché band — hero watermark</div>
+  <h2>Security print, faint.</h2>
+  <p class="note">The PNG at <code>16%</code> opacity, <code>multiply</code> blend, behind the headline. (Raw file is 11.7MB — must be optimized to a web WebP before shipping.)</p>
+  <div class="hero">
+    <div class="gband"></div>
+    <div class="htext">
+      <h1>Private trades, <em>public</em> proofs.</h1>
+      <div class="sub">Privacy × Perps · Solana Devnet</div>
+    </div>
+  </div>
+
+  <div class="kick">Asset 03 · Footer seal — guilloché crop + berg</div>
+  <h2>The medallion.</h2>
+  <p class="note">Guilloché cropped to a circle with a double ring; the ink berg centered on top.</p>
+  <div class="panel"><div class="sealrow">
+    <div class="col"><div class="seal"><div class="gfill"></div><div class="berg" id="seal1"></div></div><div class="cap">Berg on guilloché</div></div>
+    <div class="col"><div class="seal" style="box-shadow:0 0 0 5px var(--paper),0 0 0 6.5px var(--accent);border-color:var(--accent)"><div class="gfill" style="opacity:.32"></div><div class="berg" id="seal2"></div></div><div class="cap">Accent ring</div></div>
+  </div></div>
+
+</div>
+<script>
+(async () => {
+  const res = await fetch('ref-iceberg-gemini.svg');
+  const txt = await res.text();
+  const doc = new DOMParser().parseFromString(txt, 'image/svg+xml');
+  const ds = [...doc.querySelectorAll('path')].map(p => p.getAttribute('d'));
+  const VB = '332 92 384 384'; // cropped to berg bbox
+  const berg = (size, fill) =>
+    `<svg width="${size}" height="${size}" viewBox="${VB}">` +
+    ds.map(d => `<path d="${d}" fill="${fill}"/>`).join('') + `</svg>`;
+
+  document.getElementById('big').innerHTML = berg(190, '#1A1815');
+  document.getElementById('dark').innerHTML = berg(120, '#F2EEE4') + berg(120, '#2438DE');
+  document.getElementById('seal1').innerHTML = berg(96, '#1A1815');
+  document.getElementById('seal2').innerHTML = berg(96, '#1A1815');
+  const sizes = [16, 24, 32, 48, 64];
+  document.getElementById('ladder').innerHTML = sizes.map(s =>
+    `<div class="px"><div class="chip" style="width:${Math.max(s,16)+8}px;height:${Math.max(s,16)+8}px;padding:4px">${berg(s, '#1A1815')}</div><span>${s}</span></div>`
+  ).join('');
+})();
+</script>
+</body>
+</html>
