@@ -58,7 +58,7 @@ export function toSubmitOrderArgs(e: EncryptedOrder): SubmitOrderArgs {
 // Decrypt an encrypted fill returned by match_batch_callback.
 // Caller must persist the privateKey from the original encryptOrder() call.
 export function decryptFill(
-  ciphertext: Uint8Array,
+  ciphertext: number[],
   nonce: Uint8Array,
   privateKey: Uint8Array,
   mxePublicKey: Uint8Array,

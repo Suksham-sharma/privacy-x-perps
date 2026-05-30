@@ -53,3 +53,4 @@ dist/
 # Agent tooling (per-developer, like .claude/ and .gstack/)
 .agents/
 skills-lock.json
+.playwright-mcp/

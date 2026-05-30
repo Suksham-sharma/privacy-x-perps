@@ -9,12 +9,14 @@ export interface OrderPlaintext {
 
 // Encryption output. Each ct_* is a 32-byte ciphertext aligned with
 // EncryptedOrderSlot in programs/.../state/mod.rs.
+// RescueCipher.encrypt returns number[][] (each inner array is 32 bytes), so we
+// keep that shape here — toSubmitOrderArgs forwards it straight to the program.
 export interface EncryptedOrder {
   x25519Pubkey: Uint8Array; // 32 bytes
   nonce: Uint8Array;        // 16 bytes
-  ctSide: Uint8Array;
-  ctPrice: Uint8Array;
-  ctSize: Uint8Array;
-  ctClientNonce: Uint8Array;
+  ctSide: number[];
+  ctPrice: number[];
+  ctSize: number[];
+  ctClientNonce: number[];
   privateKey: Uint8Array;   // keep this; required to decrypt the fill
 }

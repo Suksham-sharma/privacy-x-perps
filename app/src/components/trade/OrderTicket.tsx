@@ -20,7 +20,6 @@ import {
 import { useProgram } from "@/lib/anchor";
 import { useMxePublicKey } from "@/hooks/useMxePublicKey";
 import { useUserCollateral } from "@/hooks/useUserCollateral";
-import { useBatchBuffer } from "@/hooks/useBatchBuffer";
 import { PROGRAM_ID } from "@/lib/config";
 import { fmtUsdc, INDEX_PRICE_TICKS } from "@/lib/format";
 
@@ -38,7 +37,6 @@ export function OrderTicket() {
   const { publicKey, connected } = useWallet();
   const mxe = useMxePublicKey();
   const collateral = useUserCollateral();
-  const batch = useBatchBuffer();
   const qc = useQueryClient();
 
   const [side, setSide] = useState<0 | 1>(0); // 0 long, 1 short
@@ -59,13 +57,6 @@ export function OrderTicket() {
   const ready =
     connected && !!publicKey && !!program && !!mxe.data && size > 0n && !insufficient;
   const levPct = ((leverage - 1) / 9) * 100;
-
-  const myKey = publicKey?.toBase58();
-  const hasPending =
-    !!myKey &&
-    !!batch.data &&
-    !batch.data.isProcessing &&
-    batch.data.owners.includes(myKey);
 
   async function submit() {
     if (!program || !publicKey || !mxe.data) return;
@@ -88,6 +79,9 @@ export function OrderTicket() {
           JSON.stringify({
             clientNonce: clientNonce.toString(),
             privateKey: Array.from(enc.privateKey),
+            side,
+            size: size.toString(),
+            leverage,
           }),
         );
       } catch {}
@@ -109,7 +103,7 @@ export function OrderTicket() {
           args.ctSize,
           args.ctClientNonce,
         )
-        .accounts({
+        .accountsPartial({
           user: publicKey,
           market,
           batchBuffer,
@@ -133,28 +127,6 @@ export function OrderTicket() {
     }
   }
 
-  async function cancelPending() {
-    if (!program || !publicKey) return;
-    setBusy(true);
-    setStatus({ tone: "info", msg: "Cancelling pending order…" });
-    try {
-      const [market] = deriveMarketPda(PROGRAM_ID);
-      const [batchBuffer] = deriveBatchBufferPda(market, PROGRAM_ID);
-      const [userCollateral] = deriveUserCollateralPda(market, publicKey, PROGRAM_ID);
-      const sig = await program.methods
-        .cancelOrder()
-        .accounts({ user: publicKey, market, batchBuffer, userCollateral })
-        .rpc();
-      setStatus({ tone: "ok", msg: `Order cancelled, margin refunded. ${sig.slice(0, 8)}…` });
-      qc.invalidateQueries({ queryKey: ["batchBuffer"] });
-      qc.invalidateQueries({ queryKey: ["userCollateral"] });
-    } catch (e) {
-      setStatus({ tone: "err", msg: (e as Error).message });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const submitLabel = busy
     ? "Sealing…"
     : mxe.isLoading
@@ -162,13 +134,7 @@ export function OrderTicket() {
       : "Encrypt & Submit";
 
   return (
-    <section className="cpanel">
-      <div className="cpanel-h">
-        <span className="cpanel-title">Order</span>
-        <span className="cpanel-sub">Sealed · MPC</span>
-      </div>
-
-      <div className="ticket">
+    <div className="ticket">
       <div className="ls">
         <button
           className={side === 0 ? "on-long" : ""}
@@ -263,17 +229,6 @@ export function OrderTicket() {
         {submitLabel}
       </button>
 
-      {hasPending && (
-        <button
-          className="btn cwithdraw"
-          style={{ width: "100%" }}
-          onClick={cancelPending}
-          disabled={busy}
-        >
-          {busy ? "…" : "Cancel pending order · refund margin"}
-        </button>
-      )}
-
       {!connected ? (
         <div className="cstatus info">Connect a wallet to submit an order.</div>
       ) : insufficient && size > 0n ? (
@@ -283,7 +238,6 @@ export function OrderTicket() {
       ) : status ? (
         <div className={`cstatus ${status.tone}`}>{status.msg}</div>
       ) : null}
-      </div>
-    </section>
+    </div>
   );
 }

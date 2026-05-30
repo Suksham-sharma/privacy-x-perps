@@ -7,11 +7,17 @@ import { deriveMarketPda, deriveBatchBufferPda } from "@confidential-perps/sdk";
 import { useProgram } from "@/lib/anchor";
 import { PROGRAM_ID } from "@/lib/config";
 
+export interface BatchSlot {
+  owner: string; // base58 — public on-chain
+  maxMargin: bigint; // public locked margin; side/price/size stay encrypted
+}
+
 export interface BatchState {
   nOrders: number;
   batchId: bigint;
   isProcessing: boolean;
-  owners: string[]; // base58 owners of the queued orders (plaintext on-chain)
+  orders: BatchSlot[]; // the queued slots (owner + margin are plaintext)
+  owners: string[]; // base58 owners, for quick membership checks
 }
 
 export function useBatchBuffer() {
@@ -26,13 +32,18 @@ export function useBatchBuffer() {
       const [bb] = deriveBatchBufferPda(market, PROGRAM_ID);
       const acc = await (program!.account as any).batchBuffer.fetchNullable(bb);
       if (!acc) return null;
+      const orders: BatchSlot[] = acc.orders
+        .slice(0, acc.nOrders)
+        .map((o: any) => ({
+          owner: o.owner.toBase58(),
+          maxMargin: BigInt(o.maxMargin.toString()),
+        }));
       return {
         nOrders: acc.nOrders,
         batchId: BigInt(acc.batchId.toString()),
         isProcessing: acc.isProcessing,
-        owners: acc.orders
-          .slice(0, acc.nOrders)
-          .map((o: any) => o.owner.toBase58()),
+        orders,
+        owners: orders.map((o) => o.owner),
       };
     },
   });

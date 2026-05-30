@@ -1,8 +1,9 @@
 "use client";
-// Positions panel: the connected wallet's open position (plaintext in v0) with
-// direction, size, entry, margin, and unrealized PnL marked at the index price.
-// Close → close_position (settles realized PnL at the Pyth fixture, returns
-// collateral). Empty state when flat.
+// Positions ledger (the Positions tab): the connected wallet's open position
+// (plaintext in v0) as a ledger row — direction, size, entry, mark, est. liq,
+// margin, and unrealized PnL marked at the on-chain index (localnet Pyth
+// fixture). Your row is accent-tinted ("your row legible"). Close →
+// close_position settles realized PnL and returns collateral.
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,7 +37,7 @@ export function PositionsPanel() {
       const [userCollateral] = deriveUserCollateralPda(market, publicKey, PROGRAM_ID);
       const sig = await program.methods
         .closePosition()
-        .accounts({
+        .accountsPartial({
           user: publicKey,
           market,
           position,
@@ -56,72 +57,55 @@ export function PositionsPanel() {
 
   const p = pos.data;
 
+  if (!p) {
+    return <div className="pane-empty">No open position — submit an order to open one.</div>;
+  }
+
+  const isLong = p.baseAmountLots > 0n;
+  const size = abs(p.baseAmountLots);
+  const entry = size > 0n ? abs(p.quoteEntry) / size : 0n;
+  const upnl = p.baseAmountLots * INDEX_PRICE_TICKS + p.quoteEntry;
+  // Simple liquidation estimate (no funding/maintenance in v0): the price move
+  // that exhausts locked margin against entry notional.
+  const notionalAtEntry = Number(abs(p.quoteEntry)) || 1;
+  const frac = Number(p.marginLocked) / notionalAtEntry;
+  const entryNum = Number(entry);
+  const liq = Math.round(isLong ? entryNum * (1 - frac) : entryNum * (1 + frac));
+  const fmt = (n: number) => n.toLocaleString("en-US");
+
   return (
-    <section className="cpanel">
-      <div className="cpanel-h">
-        <span className="cpanel-title">Position</span>
-        <span className="cpanel-sub">Plaintext · yours</span>
+    <>
+      <div className="tled-h">
+        <span>Position</span>
+        <span>Size</span>
+        <span>Entry</span>
+        <span>Mark</span>
+        <span>Est. liq.</span>
+        <span>Margin</span>
+        <span>uPnL</span>
+        <span />
       </div>
-      <div className="cpanel-body">
-        {!p ? (
-          <div className="cnote">No open position — submit an order.</div>
-        ) : (
-          (() => {
-            const isLong = p.baseAmountLots > 0n;
-            const size = abs(p.baseAmountLots);
-            const entry = size > 0n ? abs(p.quoteEntry) / size : 0n;
-            const upnl = p.baseAmountLots * INDEX_PRICE_TICKS + p.quoteEntry;
-            return (
-              <>
-                <div className="prow">
-                  <span className={`pside ${isLong ? "long" : "short"}`}>
-                    {isLong ? "LONG" : "SHORT"}
-                  </span>
-                  <span className="psize">{size.toLocaleString("en-US")} lots</span>
-                </div>
-                <div className="ticket-sum">
-                  <div className="l">
-                    <span className="k">Entry</span>
-                    <span>{entry.toLocaleString("en-US")}</span>
-                  </div>
-                  <div className="l">
-                    <span className="k">Mark</span>
-                    <span>{INDEX_PRICE_TICKS.toLocaleString("en-US")}</span>
-                  </div>
-                  <div className="l">
-                    <span className="k">Margin</span>
-                    <span>{fmtUsdc(p.marginLocked)} USDC</span>
-                  </div>
-                  <div className="l">
-                    <span className="k">Unrealized PnL</span>
-                    <span
-                      style={{
-                        color:
-                          upnl > 0n
-                            ? "var(--long)"
-                            : upnl < 0n
-                              ? "var(--short)"
-                              : undefined,
-                      }}
-                    >
-                      {fmtUsdc(upnl)} USDC
-                    </span>
-                  </div>
-                </div>
-                <button
-                  className="btn cwithdraw"
-                  style={{ width: "100%" }}
-                  onClick={close}
-                  disabled={busy}
-                >
-                  {busy ? "Closing…" : "Close position"}
-                </button>
-              </>
-            );
-          })()
-        )}
-        {status && <div className={`cstatus ${status.tone}`}>{status.msg}</div>}
+      <div className="tled-row you">
+        <span className="side">
+          <span className={`tag ${isLong ? "long" : "short"}`}>{isLong ? "Long" : "Short"}</span> SOL-PERP
+        </span>
+        <span className="c">{fmt(Number(size))}</span>
+        <span className="c">{fmt(Number(entry))}</span>
+        <span className="c">{fmt(Number(INDEX_PRICE_TICKS))}</span>
+        <span className="c">{fmt(liq)}</span>
+        <span className="c">{fmtUsdc(p.marginLocked)}</span>
+        <span className={`c ${upnl > 0n ? "long" : upnl < 0n ? "short" : ""}`}>{fmtUsdc(upnl)}</span>
+        <span style={{ textAlign: "right" }}>
+          <button className="close" onClick={close} disabled={busy}>
+            {busy ? "Closing…" : "Close"}
+          </button>
+        </span>
       </div>
-    </section>
+      {status && (
+        <div className="pane-status" style={{ paddingTop: 12 }}>
+          <div className={`cstatus ${status.tone}`}>{status.msg}</div>
+        </div>
+      )}
+    </>
   );
 }

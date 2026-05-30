@@ -216,6 +216,8 @@ h2.sec-title em { font-style: italic; }
 .seal { display: flex; align-items: center; gap: 9px; border: 1px solid var(--accent); background: rgba(36,56,222,0.05); padding: 9px 11px; font-family: var(--mono); font-size: 10.5px; color: var(--accent); letter-spacing: 0.04em; }
 .submit { height: 48px; background: var(--accent); color: #fff; border: none; font-family: var(--mono); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; cursor: pointer; transition: background .2s; }
 .submit:hover { background: var(--accent-deep); }
+.submit:disabled { background: var(--paper-2); color: var(--ink-3); cursor: not-allowed; box-shadow: inset 0 0 0 1px var(--line); }
+.submit:disabled:hover { background: var(--paper-2); }
 
 /* lifecycle sequence */
 .seq { display: grid; grid-template-columns: repeat(3, 1fr); position: relative; }
@@ -316,16 +318,149 @@ svg.ic { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width
   .sec-head { flex-direction: column; align-items: flex-start; gap: 16px; } .sec-head .left { max-width: 100%; }
 }
 
-/* ---- /trade · screen shell ---- */
-.trade-shell { min-height: 100vh; background: var(--paper); }
-.trade-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; border-bottom: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); }
-.trade-brand { display: flex; align-items: baseline; gap: 14px; }
-.trade-mkt { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: 0.04em; }
-.trade-tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.65; }
-/* Phase 2: a single centered column for the Collateral panel. Becomes the
-   full chart/ticket/positions grid in later phases. */
-.trade-grid { max-width: 440px; margin: 0 auto; padding: 28px; display: grid; gap: 22px; }
-.trade-loading { min-height: 100vh; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--paper); }
+.trade-loading { min-height: 100vh; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--paper-2); }
+
+/* ============================================================
+   /trade — full-page confidential terminal
+   Reuses the landing's atomic component classes (.ticket, .ls, .fld,
+   .lev-*, .seal, .submit, .redact, .cstats, .cinput) so the screen reads
+   as the same Declassified system; the shell/bar/tabs/drawer are new.
+   ============================================================ */
+.tscreen { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--paper-2); color: var(--ink); }
+
+/* --- top bar (dark) --- */
+.tbar { display: flex; align-items: center; gap: 14px; padding: 0 18px; height: 56px; flex: none; background: var(--ink); color: var(--paper); }
+.tbar-brand { display: flex; align-items: center; gap: 9px; font-family: var(--serif); font-weight: 600; font-size: 18px; letter-spacing: -0.01em; white-space: nowrap; flex: none; }
+.tbar-brand .tbar-logo { color: var(--paper); flex: none; }
+.tbar-mkt { display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-weight: 600; font-size: 14px; letter-spacing: 0.04em; white-space: nowrap; flex: none; }
+.tbar-stats { display: flex; gap: 22px; }
+.tbar-s { display: flex; flex-direction: column; gap: 2px; }
+.tbar-s .k { font-family: var(--mono); font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; white-space: nowrap; }
+.tbar-s .v { font-family: var(--mono); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tbar-s .v.up { color: #7BD3A0; } .tbar-s .v.down { color: #E08B7E; }
+.tbar-spacer { flex: 1; }
+.tbar-margin { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+.tbar-margin .k { font-family: var(--mono); font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; white-space: nowrap; }
+.tbar-margin .v { font-family: var(--mono); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tbar-btn { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: transparent; color: var(--paper); border: 1px solid rgba(242,238,228,0.45); padding: 8px 12px; cursor: pointer; display: flex; gap: 7px; align-items: center; font-weight: 500; transition: all .18s var(--ease); white-space: nowrap; }
+.tbar-btn:hover { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.tbar-div { width: 1px; height: 28px; background: rgba(242,238,228,0.2); flex: none; }
+.tbar-sess { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; border: 1px solid rgba(242,238,228,0.4); padding: 6px 9px; border-radius: 2px; display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.tbar-sess .pip { width: 6px; height: 6px; border-radius: 50%; background: #7BD3A0; flex: none; box-shadow: 0 0 0 0 rgba(123,211,160,0.6); animation: tpip 2.4s var(--ease) infinite; }
+@keyframes tpip { 0% { box-shadow: 0 0 0 0 rgba(123,211,160,0.5); } 70% { box-shadow: 0 0 0 5px rgba(123,211,160,0); } 100% { box-shadow: 0 0 0 0 rgba(123,211,160,0); } }
+
+/* --- custom wallet button (Declassified system) --- */
+.tbar-wallet { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.04em; height: 38px; padding: 0 14px; border: none; cursor: pointer; background: var(--paper); color: var(--ink); transition: background .15s var(--ease); white-space: nowrap; }
+.tbar-wallet:hover { background: #fff; }
+.tbar-wallet .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--long); flex: none; }
+.tbar-wallet.connect { background: var(--accent); color: #fff; }
+.tbar-wallet.connect:hover { background: var(--accent-deep); }
+.tbar-wallet:disabled { opacity: 0.6; cursor: progress; }
+
+/* --- main row: chart | ticket --- */
+.tmain { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 344px; }
+.tchart-cell { display: flex; flex-direction: column; min-height: 0; border-right: 1.5px solid var(--ink); border-top: 1.5px solid var(--ink); background: var(--card); }
+.tchart-bar { display: flex; align-items: baseline; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--line); flex: none; }
+.tchart-bar .px { font-family: var(--mono); font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.tchart-bar .chg { font-family: var(--mono); font-size: 12px; }
+.tchart-bar .chg.up { color: var(--long); } .tchart-bar .chg.down { color: var(--short); }
+.tchart-bar .pair { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.tchart-tf { margin-left: auto; align-self: center; display: flex; gap: 2px; }
+.tchart-tf button { font-family: var(--mono); font-size: 10px; color: var(--muted); padding: 4px 9px; cursor: pointer; border: 1px solid transparent; background: transparent; }
+.tchart-tf button.on { color: var(--accent); border-color: var(--accent); border-radius: 2px; }
+.tchart-canvas { flex: 1; min-height: 0; position: relative; }
+.tchart-note { position: absolute; right: 14px; top: 10px; z-index: 3; font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: rgba(251,250,245,0.72); padding: 2px 6px; pointer-events: none; }
+
+/* --- ticket rail --- */
+.tticket-cell { display: flex; flex-direction: column; min-height: 0; background: var(--card); border-top: 1.5px solid var(--ink); }
+.tticket-h { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border-bottom: 1px solid var(--line); flex: none; }
+.tticket-h .t { font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+.tticket-h .n { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.tticket-cell .ticket { flex: 1; min-height: 0; overflow: hidden; gap: 12px; padding: 16px 18px; }
+.tticket-cell .seal { white-space: nowrap; font-size: 10px; letter-spacing: 0.02em; }
+.pct { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pct button { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; padding: 7px 0; border: 1px solid var(--line-2); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s var(--ease); }
+.pct button:hover, .pct button.on { border-color: var(--ink); color: var(--ink); }
+
+/* --- activity panel (bottom): tabs --- */
+.tact { flex: none; height: 230px; display: flex; flex-direction: column; border-top: 1.5px solid var(--ink); background: var(--card); }
+.tabs { display: flex; align-items: stretch; border-bottom: 1.5px solid var(--ink); background: var(--paper-2); flex: none; }
+.tab { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; padding: 12px 18px; cursor: pointer; color: var(--muted); border: none; border-right: 1px solid var(--line); background: transparent; display: flex; align-items: center; gap: 8px; }
+.tab .badge { font-family: var(--mono); font-size: 8.5px; background: var(--line-2); color: var(--ink); border-radius: 2px; padding: 1px 5px; min-width: 15px; text-align: center; }
+.tab.on { background: var(--card); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); font-weight: 600; }
+.tab.on .badge { background: var(--accent); color: #fff; }
+.tact-ctx { margin-left: auto; align-self: center; padding-right: 16px; }
+.tpane { flex: 1; min-height: 0; overflow-y: auto; }
+.pane-empty { padding: 30px 20px; text-align: center; font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+.pane-note { padding: 11px 20px; }
+.pane-status { padding: 0 20px 12px; }
+
+/* --- encrypted batch register (Open Orders) --- */
+.ebk-h, .ebk-row, .ebk-empty { display: grid; grid-template-columns: 42px 1.2fr 1.3fr 0.9fr; gap: 14px; align-items: center; padding: 9px 20px; font-family: var(--mono); }
+.ebk-h { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: var(--paper-2); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1; }
+.ebk-h span:last-child, .ebk-row .mg, .ebk-empty span:last-child { text-align: right; }
+.ebk-row { font-size: 12px; border-bottom: 1px solid var(--line); }
+.ebk-row .slot, .ebk-empty .slot { color: var(--muted); font-size: 10px; }
+.ebk-row .tr { color: var(--ink-2); }
+.ebk-row.you { background: rgba(36,56,222,0.05); box-shadow: inset 3px 0 0 var(--accent); }
+.ebk-row.you .tr { color: var(--accent); }
+.ebk-row .side-long { color: var(--long); font-weight: 500; }
+.ebk-row .side-short { color: var(--short); font-weight: 500; }
+.ebk-row .mg { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.ebk-empty { font-size: 11px; color: var(--muted); opacity: 0.55; border-bottom: 1px dashed var(--line); }
+.ebk-cancel { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; border: 1.5px solid var(--ink); background: transparent; padding: 5px 10px; cursor: pointer; }
+.ebk-cancel:hover { background: var(--ink); color: var(--paper); }
+.ebk-cancel:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* --- positions ledger --- */
+.tled-h, .tled-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1fr 1.1fr auto; gap: 16px; align-items: center; padding: 12px 20px; font-family: var(--mono); }
+.tled-h { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: var(--paper-2); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1; }
+.tled-h span:nth-child(n+2), .tled-row .c { text-align: right; }
+.tled-row { font-size: 13px; border-bottom: 1px solid var(--line); }
+.tled-row.you { background: rgba(36,56,222,0.045); box-shadow: inset 3px 0 0 var(--accent); }
+.tled-row .side { display: flex; align-items: center; gap: 10px; text-align: left; font-weight: 500; }
+.tled-row .tag { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; }
+.tled-row .tag.long { background: rgba(28,124,74,0.12); color: var(--long); }
+.tled-row .tag.short { background: rgba(184,50,39,0.12); color: var(--short); }
+.tled-row .c.long { color: var(--long); } .tled-row .c.short { color: var(--short); }
+.tled-row .close { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; border: 1.5px solid var(--ink); background: transparent; padding: 7px 13px; cursor: pointer; }
+.tled-row .close:hover { background: var(--ink); color: var(--paper); }
+.tled-row .close:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* --- history --- */
+.hist-row { display: grid; grid-template-columns: 168px 1fr auto 104px; gap: 18px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); font-family: var(--mono); }
+.hist-row .ev { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 500; }
+.hist-row .tag { font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; }
+.hist-row .tag.cleared { background: rgba(36,56,222,0.1); color: var(--accent); }
+.hist-row .tag.you { background: rgba(28,124,74,0.12); color: var(--long); }
+.hist-row .desc { font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.hist-row .when { font-size: 10px; color: var(--muted); text-align: right; }
+
+/* --- deposit drawer --- */
+.tscrim { position: fixed; inset: 0; background: rgba(26,24,21,0.42); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease); z-index: 200; }
+.tscrim.show { opacity: 1; pointer-events: auto; }
+.tdrawer { position: fixed; top: 0; right: 0; height: 100vh; width: 384px; max-width: 92vw; background: var(--card); border-left: 1.5px solid var(--ink); box-shadow: -16px 0 40px -24px rgba(26,24,21,0.6); transform: translateX(100%); transition: transform .28s var(--ease); z-index: 201; display: flex; flex-direction: column; }
+.tdrawer.open { transform: none; }
+.tdrawer-h { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px; border-bottom: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; flex: none; }
+.tdrawer-h .x { cursor: pointer; font-size: 20px; line-height: 1; opacity: 0.7; background: none; border: none; color: var(--paper); }
+.tdrawer-h .x:hover { opacity: 1; }
+.tdrawer-body { padding: 22px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1.5px solid var(--ink); }
+.seg button { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; height: 40px; border: none; background: transparent; cursor: pointer; color: var(--muted); font-weight: 500; }
+.seg button.on { background: var(--ink); color: var(--paper); }
+.seg button + button { border-left: 1.5px solid var(--ink); }
+
+/* --- responsive --- */
+@media (max-width: 1000px) {
+  .tscreen { height: auto; min-height: 100vh; overflow: visible; }
+  .tmain { grid-template-columns: 1fr; }
+  .tchart-cell { border-right: none; border-bottom: 1.5px solid var(--ink); }
+  .tchart-canvas { height: 340px; }
+  .tticket-cell { border-top: none; }
+  .tact { height: auto; }
+  .tbar { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 12px; }
+  .tbar-stats { gap: 16px; }
+}
 
 /* ---- /trade · Collateral panel ---- */
 .cpanel { border: 1.5px solid var(--ink); background: var(--card); }
