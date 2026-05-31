@@ -88,6 +88,10 @@ pub mod confidential_perps {
         match_batch::match_batch_callback_handler(ctx, output)
     }
 
+    pub fn init_pool(ctx: Context<InitPool>, amount: u64) -> Result<()> {
+        init_pool::init_pool_handler(ctx, amount)
+    }
+
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         deposit::deposit_handler(ctx, amount)
     }

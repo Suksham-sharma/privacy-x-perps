@@ -19,7 +19,7 @@ import { PROGRAM_ID } from "@/lib/config";
 import { fmtUsdc } from "@/lib/format";
 import { friendlyError } from "@/lib/errors";
 
-const MAX_ORDERS = 8;
+const MAX_ORDERS = 4;
 
 interface Stash {
   side?: 0 | 1;

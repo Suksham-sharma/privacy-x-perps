@@ -1,12 +1,12 @@
-// match_batch Anchor side — comp def init + callback. process_batch.rs queues
-// the computation whose result fires this callback.
+// match_batch Anchor side (v0a) — comp def init + callback. process_batch.rs
+// queues the computation whose result fires this callback.
 use crate::{
     constants::{
-        BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, POSITION_SEED,
-        USER_COLLATERAL_SEED,
+        BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, MAX_ORDERS, POOL_SEED,
+        POSITION_SEED, USER_COLLATERAL_SEED,
     },
     error::ErrorCode,
-    state::{BatchBuffer, EncryptedOrderSlot, Market, Position, UserCollateral},
+    state::{BatchBuffer, EncryptedOrderSlot, Market, Pool, Position, UserCollateral},
     ID,
     ID_CONST,
 };
@@ -51,15 +51,20 @@ pub fn init_match_batch_comp_def_handler(ctx: Context<InitMatchBatchCompDef>) ->
 }
 
 // Callback — wires the public BatchOutput from the MPC back into on-chain
-// state. Account contract must match the order process_batch passes via
+// state. Account contract MUST match the order process_batch passes via
 // callback_ix's extra_accs slice:
-//   [market, batch_buffer, position_a, position_b,
-//    user_collateral_a, user_collateral_b]
+//   [market, batch_buffer, pool,
+//    position_0..3, user_collateral_0..3]
 //
-// position_*/user_collateral_* PDAs derive against batch_buffer.orders[0/1]
-// .owner, so process_batch must NOT reset the buffer — the callback resets it
-// here after fills land, otherwise the derivation drifts and Anchor's seeds
-// check fails.
+// position_i / user_collateral_i derive against batch_buffer.orders[i].owner,
+// so process_batch must NOT reset the buffer — the callback resets it here
+// after fills land, otherwise the derivation drifts. Slots >= n_orders are
+// filled with the market key by process_batch and IGNORED here.
+//
+// Positions + collaterals are UncheckedAccount (validated manually in the
+// handler) rather than typed Box<Account>: (1) typed accounts can't validate a
+// filler/non-existent padding slot, and (2) 8 more Box<Account> would blow the
+// SBF stack budget (see JOURNAL Day 4). market/batch_buffer/pool stay typed.
 
 #[callback_accounts("match_batch")]
 #[derive(Accounts)]
@@ -85,7 +90,7 @@ pub struct MatchBatchCallback<'info> {
     /// read-only inside validate_callback_ixs.
     pub instructions_sysvar: UncheckedAccount<'info>,
 
-    // extra_accs — passed by process_batch's callback_ix call.
+    // extra_accs — passed by process_batch's callback_ix call (same order).
 
     #[account(
         seeds = [MARKET_SEED],
@@ -102,43 +107,50 @@ pub struct MatchBatchCallback<'info> {
 
     #[account(
         mut,
-        seeds = [POSITION_SEED, market.key().as_ref(), batch_buffer.orders[0].owner.as_ref()],
-        bump = position_a.bump,
+        seeds = [POOL_SEED, market.key().as_ref()],
+        bump = pool.bump,
     )]
-    pub position_a: Box<Account<'info, Position>>,
+    pub pool: Box<Account<'info, Pool>>,
 
-    #[account(
-        mut,
-        seeds = [POSITION_SEED, market.key().as_ref(), batch_buffer.orders[1].owner.as_ref()],
-        bump = position_b.bump,
-    )]
-    pub position_b: Box<Account<'info, Position>>,
+    /// CHECK: PDA + owner + discriminator validated in the handler via
+    /// `apply_fill_unchecked` (only for slots < n_orders that filled); `mut`
+    /// sets the writable bit.
+    #[account(mut)]
+    pub position_0: UncheckedAccount<'info>,
+    /// CHECK: see position_0.
+    #[account(mut)]
+    pub position_1: UncheckedAccount<'info>,
+    /// CHECK: see position_0.
+    #[account(mut)]
+    pub position_2: UncheckedAccount<'info>,
+    /// CHECK: see position_0.
+    #[account(mut)]
+    pub position_3: UncheckedAccount<'info>,
 
-    // UserCollateral PDAs are validated + deserialized manually in the handler
-    // (see `credit_refund`): two more typed Box<Account<...>> pushed Anchor's
-    // generated try_accounts past the BPF stack budget. Validating only on the
-    // NoMatch branch (where the refund fires) is also a happy-path CU win.
-    /// CHECK: PDA derivation + owner + discriminator validated in handler via
-    /// `credit_refund`. `mut` here only sets the writable bit.
+    /// CHECK: PDA + owner + discriminator validated in the handler via
+    /// `credit_refund` (only for slots < n_orders that filled 0); `mut` sets
+    /// the writable bit.
     #[account(mut)]
-    pub user_collateral_a: UncheckedAccount<'info>,
-    /// CHECK: same as user_collateral_a.
+    pub user_collateral_0: UncheckedAccount<'info>,
+    /// CHECK: see user_collateral_0.
     #[account(mut)]
-    pub user_collateral_b: UncheckedAccount<'info>,
+    pub user_collateral_1: UncheckedAccount<'info>,
+    /// CHECK: see user_collateral_0.
+    #[account(mut)]
+    pub user_collateral_2: UncheckedAccount<'info>,
+    /// CHECK: see user_collateral_0.
+    #[account(mut)]
+    pub user_collateral_3: UncheckedAccount<'info>,
 }
 
 #[event]
 pub struct BatchSettledEvent {
     pub batch_id: u64,
     pub clearing_price: u64,
-    pub total_volume: u64,
-    pub owner_a: Pubkey,
-    pub owner_b: Pubkey,
-}
-
-#[event]
-pub struct NoMatchEvent {
-    pub batch_id: u64,
+    pub total_long_base: u64,    // gross long lots filled this batch
+    pub total_short_base: u64,   // gross short lots filled this batch
+    pub pool_base: i64,          // pool's aggregate net base AFTER this batch
+    pub filled_owners: Vec<Pubkey>, // owners whose order filled (size > 0)
 }
 
 pub fn match_batch_callback_handler(
@@ -154,86 +166,95 @@ pub fn match_batch_callback_handler(
     };
 
     // Field order matches encrypted-ixs BatchOutput:
-    //   field_0 clearing_price, field_1 total_volume,
-    //   field_2 fill_a_size,    field_3 fill_a_side,
-    //   field_4 fill_b_size,    field_5 fill_b_side.
+    //   f0 clearing_price, f1 total_long_base, f2 total_short_base,
+    //   f3 f0_size, f4 f0_side, f5 f1_size, f6 f1_side,
+    //   f7 f2_size, f8 f2_side, f9 f3_size, f10 f3_side.
     let clearing_price = o.field_0;
-    let total_volume = o.field_1;
-    let fill_a_size = o.field_2;
-    let fill_a_side = o.field_3;
-    let fill_b_size = o.field_4;
-    let fill_b_side = o.field_5;
+    let total_long = o.field_1;
+    let total_short = o.field_2;
+    let fill_sizes = [o.field_3, o.field_5, o.field_7, o.field_9];
+    let fill_sides = [o.field_4, o.field_6, o.field_8, o.field_10];
 
     let market_key = ctx.accounts.market.key();
-    let buf = &mut ctx.accounts.batch_buffer;
-    let batch_id = buf.batch_id;
-    let owner_a = buf.orders[0].owner;
-    let owner_b = buf.orders[1].owner;
-    // Snapshot max_margins before the buffer reset below zeroes orders[].
-    let max_margin_a = buf.orders[0].max_margin;
-    let max_margin_b = buf.orders[1].max_margin;
 
-    if clearing_price == 0 {
-        // No-match: refund both locked margins. On match, max_margin stays
-        // locked as the position's backing collateral (see EncryptedOrderSlot).
-        credit_refund(
-            &ctx.accounts.user_collateral_a,
-            &market_key,
-            &owner_a,
-            max_margin_a,
-        )?;
-        credit_refund(
-            &ctx.accounts.user_collateral_b,
-            &market_key,
-            &owner_b,
-            max_margin_b,
-        )?;
-        emit!(NoMatchEvent { batch_id });
-    } else {
-        // Position.owner + bump are already stamped by submit_order (lazy
-        // init there); the callback just accumulates fills.
-        apply_fill(
-            &mut ctx.accounts.position_a,
-            fill_a_size,
-            fill_a_side,
-            clearing_price,
-            max_margin_a,
-        )?;
-        apply_fill(
-            &mut ctx.accounts.position_b,
-            fill_b_size,
-            fill_b_side,
-            clearing_price,
-            max_margin_b,
-        )?;
+    // Snapshot per-order routing data before the buffer reset zeroes orders[].
+    let (batch_id, n, owners, margins) = {
+        let buf = &ctx.accounts.batch_buffer;
+        let n = buf.n_orders as usize;
+        let mut owners = [Pubkey::default(); MAX_ORDERS];
+        let mut margins = [0u64; MAX_ORDERS];
+        for i in 0..n {
+            owners[i] = buf.orders[i].owner;
+            margins[i] = buf.orders[i].max_margin;
+        }
+        (buf.batch_id, n, owners, margins)
+    };
 
-        emit!(BatchSettledEvent {
-            batch_id,
-            clearing_price,
-            total_volume,
-            owner_a,
-            owner_b,
-        });
+    let position_infos = [
+        ctx.accounts.position_0.to_account_info(),
+        ctx.accounts.position_1.to_account_info(),
+        ctx.accounts.position_2.to_account_info(),
+        ctx.accounts.position_3.to_account_info(),
+    ];
+    let uc_infos = [
+        ctx.accounts.user_collateral_0.to_account_info(),
+        ctx.accounts.user_collateral_1.to_account_info(),
+        ctx.accounts.user_collateral_2.to_account_info(),
+        ctx.accounts.user_collateral_3.to_account_info(),
+    ];
+
+    // Apply each real order: a filled order updates its Position (margin stays
+    // locked as backing collateral); an order that didn't cross the oracle
+    // (fill 0) gets its locked margin refunded. No order is ever stuck.
+    let mut filled_owners: Vec<Pubkey> = Vec::new();
+    for i in 0..n {
+        if fill_sizes[i] == 0 {
+            credit_refund(&uc_infos[i], &market_key, &owners[i], margins[i])?;
+        } else {
+            apply_fill_unchecked(
+                &position_infos[i],
+                &market_key,
+                &owners[i],
+                fill_sizes[i],
+                fill_sides[i],
+                clearing_price,
+                margins[i],
+            )?;
+            filled_owners.push(owners[i]);
+        }
     }
 
-    // Reset the buffer for the next batch in either case.
+    // The pool absorbs the net imbalance at the clearing (oracle) price. When
+    // the two sides matched exactly it's a no-op (pure peer-to-peer).
+    let pool = &mut ctx.accounts.pool;
+    apply_pool(pool, total_long, total_short, clearing_price)?;
+    let pool_base = pool.base_amount_lots;
+
+    emit!(BatchSettledEvent {
+        batch_id,
+        clearing_price,
+        total_long_base: total_long,
+        total_short_base: total_short,
+        pool_base,
+        filled_owners,
+    });
+
+    // Reset the buffer for the next batch.
+    let buf = &mut ctx.accounts.batch_buffer;
     buf.n_orders = 0;
     buf.opened_at_slot = 0;
-    buf.orders = [EncryptedOrderSlot::default(); crate::constants::MAX_ORDERS];
+    buf.orders = [EncryptedOrderSlot::default(); MAX_ORDERS];
     buf.batch_id = batch_id.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
     buf.is_processing = false;
 
     Ok(())
 }
 
-// Manual UserCollateral refund — see the doc comment on user_collateral_a in
-// MatchBatchCallback for why this isn't a typed Anchor account. Validates:
-//   1. account is owned by our program (rejects spoofed accounts),
-//   2. its address matches the canonical PDA for (market, expected_owner),
-//   3. its discriminator + deserialized `owner` field match.
-// Then mutates `balance` in place and re-serializes.
+// Manual UserCollateral refund (zero-fill order). Validates: owned by our
+// program, address == canonical PDA for (market, owner), discriminator + owner
+// field match. Then credits `amount` and re-serializes.
 fn credit_refund(
-    uc_info: &UncheckedAccount<'_>,
+    uc_info: &AccountInfo<'_>,
     market_key: &Pubkey,
     expected_owner: &Pubkey,
     amount: u64,
@@ -251,57 +272,92 @@ fn credit_refund(
     let mut data = uc_info.try_borrow_mut_data()?;
     let mut uc = UserCollateral::try_deserialize(&mut data.as_ref())?;
     require_keys_eq!(uc.owner, *expected_owner, ErrorCode::InvalidCallback);
-    uc.balance = uc
-        .balance
-        .checked_add(amount)
-        .ok_or(ErrorCode::MathOverflow)?;
+    uc.balance = uc.balance.checked_add(amount).ok_or(ErrorCode::MathOverflow)?;
     let mut cursor: &mut [u8] = &mut data[..];
     uc.try_serialize(&mut cursor)?;
     Ok(())
 }
 
-// Apply a single fill to a Position. Long (side=0) adds base + pays quote;
-// short (side=1) subtracts base + receives quote. Both deltas widen to i128
-// before the checked op so a max-size fill at max price can't trip overflow.
-// Also accumulates max_margin into position.margin_locked — that's the pool
-// close_position releases back at exit, alongside realized PnL.
-fn apply_fill(
-    pos: &mut Position,
+// Manual Position fill (filled order). Same validation discipline as
+// credit_refund, then applies the long/short delta. Long (side=0) adds base +
+// pays quote; short (side=1) subtracts base + receives quote. Deltas widen to
+// i128. max_margin accumulates into margin_locked — released at close alongside
+// realized PnL.
+fn apply_fill_unchecked(
+    pos_info: &AccountInfo<'_>,
+    market_key: &Pubkey,
+    expected_owner: &Pubkey,
     fill_size: u64,
     side: u8,
     clearing_price: u64,
     max_margin: u64,
 ) -> Result<()> {
-    if fill_size == 0 {
-        return Ok(());
-    }
     require!(side <= 1, ErrorCode::InvalidComputation);
+    require_keys_eq!(*pos_info.owner, crate::ID, ErrorCode::InvalidCallback);
+    let (expected_pda, _bump) = Pubkey::find_program_address(
+        &[POSITION_SEED, market_key.as_ref(), expected_owner.as_ref()],
+        &crate::ID,
+    );
+    require_keys_eq!(pos_info.key(), expected_pda, ErrorCode::InvalidCallback);
+
+    let mut data = pos_info.try_borrow_mut_data()?;
+    let mut pos = Position::try_deserialize(&mut data.as_ref())?;
+    require_keys_eq!(pos.owner, *expected_owner, ErrorCode::InvalidCallback);
 
     let size = fill_size as i128;
     let cost = (fill_size as u128)
         .checked_mul(clearing_price as u128)
         .ok_or(ErrorCode::MathOverflow)? as i128;
-
-    let (delta_base, delta_quote) = if side == 0 {
-        (size, -cost)
-    } else {
-        (-size, cost)
-    };
+    let (delta_base, delta_quote) = if side == 0 { (size, -cost) } else { (-size, cost) };
 
     let new_base = (pos.base_amount_lots as i128)
         .checked_add(delta_base)
         .ok_or(ErrorCode::MathOverflow)?;
     pos.base_amount_lots = i64::try_from(new_base).map_err(|_| ErrorCode::MathOverflow)?;
-
     pos.quote_entry = pos
         .quote_entry
         .checked_add(delta_quote)
         .ok_or(ErrorCode::MathOverflow)?;
-
     pos.margin_locked = pos
         .margin_locked
         .checked_add(max_margin)
         .ok_or(ErrorCode::MathOverflow)?;
 
+    let mut cursor: &mut [u8] = &mut data[..];
+    pos.try_serialize(&mut cursor)?;
+    Ok(())
+}
+
+// The pool takes the OPPOSITE of the traders' net base at the clearing price.
+// Traders net long (total_long > total_short) => pool sells the excess (short):
+// base -= d, quote += d*clearing. Net short => pool buys (long): base += d,
+// quote -= d*clearing. Balanced => untouched.
+fn apply_pool(pool: &mut Pool, total_long: u64, total_short: u64, clearing_price: u64) -> Result<()> {
+    let long = total_long as i128;
+    let short = total_short as i128;
+    if long == short {
+        return Ok(());
+    }
+
+    let d = (long - short).unsigned_abs(); // net magnitude
+    let cost = (d as u128)
+        .checked_mul(clearing_price as u128)
+        .ok_or(ErrorCode::MathOverflow)? as i128;
+    let d = d as i128;
+
+    let (delta_base, delta_quote) = if long > short {
+        (-d, cost) // pool short the excess longs
+    } else {
+        (d, -cost) // pool long the excess shorts
+    };
+
+    let new_base = (pool.base_amount_lots as i128)
+        .checked_add(delta_base)
+        .ok_or(ErrorCode::MathOverflow)?;
+    pool.base_amount_lots = i64::try_from(new_base).map_err(|_| ErrorCode::MathOverflow)?;
+    pool.quote_entry = pool
+        .quote_entry
+        .checked_add(delta_quote)
+        .ok_or(ErrorCode::MathOverflow)?;
     Ok(())
 }

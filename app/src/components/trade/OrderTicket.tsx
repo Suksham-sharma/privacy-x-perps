@@ -1,8 +1,11 @@
 "use client";
 // Order ticket: pick side / size / leverage, encrypt the order CLIENT-SIDE
 // (x25519 + RescueCipher via the SDK), and submit_order. Price stays encrypted;
-// only max_margin is public. On localnet the index price is the Pyth fixture
-// (100,000 ticks); orders sit within the circuit's ±5% band so they can match.
+// only max_margin is public. v0a matches against peers + a pool backstop and
+// clears at the live oracle; a market order just needs to CROSS the oracle
+// (long: price >= oracle, short: price <= oracle), so we encrypt the price with
+// a small cross buffer (see CROSS_BUFFER_BPS) to stay crossing as the oracle
+// ticks during the batch window.
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -72,9 +75,19 @@ export function OrderTicket() {
     setStatus({ tone: "info", msg: "Encrypting order in your browser…" });
     try {
       const clientNonce = randomU64();
+      // Cross buffer: price a market long ABOVE / short BELOW the live index so
+      // the order still crosses if the keeper pushes a fresh oracle during the
+      // ~window. v0a always clears at the oracle, so this changes only the cross
+      // gate, not the execution price (never a worse fill). max_margin below
+      // stays based on the index notional, not this buffered price.
+      const CROSS_BUFFER_BPS = 200n; // 2%
+      const orderPrice =
+        side === 0
+          ? indexPrice + (indexPrice * CROSS_BUFFER_BPS) / 10_000n
+          : indexPrice - (indexPrice * CROSS_BUFFER_BPS) / 10_000n;
       const pt: OrderPlaintext = {
         side: BigInt(side),
-        price: indexPrice,
+        price: orderPrice,
         size,
         clientNonce,
       };

@@ -19,8 +19,10 @@ pub enum ErrorCode {
     BatchWindowOpen,
     #[msg("Batch is empty")]
     BatchEmpty,
-    #[msg("Batch is not ready to process (v0 requires exactly 2 orders)")]
+    #[msg("Batch is not ready to process (needs at least 1 order)")]
     BatchNotReady,
+    #[msg("Pool would exceed the maximum net skew")]
+    PoolSkewExceeded,
     #[msg("No pending order for this user in the current batch")]
     NoPendingOrder,
     #[msg("Batch is already being processed (computation in flight)")]

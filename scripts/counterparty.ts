@@ -145,7 +145,7 @@ async function main() {
     .rpc({ commitment: "confirmed" });
 
   const buf = await (program.account as any).batchBuffer.fetch(batchBuffer);
-  console.log(`submitted. batch #${buf.batchId.toString()} now ${buf.nOrders}/8 orders`);
+  console.log(`submitted. batch #${buf.batchId.toString()} now ${buf.nOrders}/4 orders`);
   console.log("Start/await the keeper to crank process_batch.");
 }
 

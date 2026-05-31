@@ -275,8 +275,13 @@ async function main() {
     oracleAcc.data.readBigInt64LE(oracleAcc.data[40] === 1 ? 73 : 74).toString(),
   );
   log(`live oracle price = $${(Number(livePrice) / 1e6).toFixed(2)} (${livePrice})`);
-  const aliceOrder: OrderPlaintext = { side: 0n, price: livePrice, size: 1n, clientNonce: 1n };
-  const bobOrder: OrderPlaintext = { side: 1n, price: livePrice, size: 1n, clientNonce: 2n };
+  // Price the long ABOVE and the short BELOW the oracle so both reliably cross
+  // even as the keeper pushes a fresh oracle during the window (v0a dropped the
+  // ±5% band; clearing is always the crank-time oracle regardless of these).
+  const longPrice = livePrice + livePrice / 50n; // +2%
+  const shortPrice = livePrice - livePrice / 50n; // -2%
+  const aliceOrder: OrderPlaintext = { side: 0n, price: longPrice, size: 1n, clientNonce: 1n };
+  const bobOrder: OrderPlaintext = { side: 1n, price: shortPrice, size: 1n, clientNonce: 2n };
   const aliceArgs = toSubmitOrderArgs(encryptOrder(aliceOrder, mxePublicKey));
   const bobArgs = toSubmitOrderArgs(encryptOrder(bobOrder, mxePublicKey));
 
@@ -350,7 +355,14 @@ async function main() {
   // (already armed above) — fires when our callback handler runs,
   // regardless of who triggered the crank.
   const settled = await settledPromise;
-  log(`callback fired → clearing=${settled.clearingPrice.toString()}  vol=${settled.totalVolume.toString()}`);
+  // The WS event can land a beat before the callback's writes are queryable at
+  // "confirmed" — let the read catch up before fetching positions.
+  await new Promise((r) => setTimeout(r, 2500));
+  log(
+    `callback fired → clearing=${settled.clearingPrice.toString()}  ` +
+      `long=${settled.totalLongBase.toString()}  short=${settled.totalShortBase.toString()}  ` +
+      `pool_base=${settled.poolBase.toString()}`,
+  );
 
   // ---- 10. fetch positions ----
   const aliceP = await (program.account as any).position.fetch(alicePos);

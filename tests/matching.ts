@@ -32,6 +32,7 @@ import {
   deriveBatchBufferPda,
   deriveUserCollateralPda,
   derivePositionPda,
+  derivePoolPda,
   encryptOrder,
   toSubmitOrderArgs,
   decryptFill,
@@ -85,6 +86,23 @@ describe("perp engine e2e", () => {
     return event;
   };
 
+  // Poll the slot until the open batch window has closed. Robust to the
+  // localnet slot rate (the window is DEFAULT_BATCH_WINDOW_SLOTS = 50 ≈ 20-25s),
+  // unlike a fixed sleep. process_batch rejects with BatchWindowOpen until then.
+  const waitForBatchWindow = async () => {
+    const market = await program.account.market.fetch(marketPda);
+    const buf = await program.account.batchBuffer.fetch(batchBufferPda);
+    const closesAt =
+      BigInt(buf.openedAtSlot.toString()) +
+      BigInt(market.batchWindowSlots.toString());
+    for (let i = 0; i < 200; i++) {
+      const slot = await provider.connection.getSlot("confirmed");
+      if (BigInt(slot) >= closesAt) return;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    throw new Error("batch window did not close in time");
+  };
+
   // SOL/USD Pyth feed id (32 bytes). Stable per asset across all Pyth
   // deployments. Must match SOL_USD_FEED_ID in programs/.../constants.rs.
   const SOL_USD_FEED_ID_HEX =
@@ -100,6 +118,7 @@ describe("perp engine e2e", () => {
 
   const [marketPda] = deriveMarketPda(program.programId);
   const [batchBufferPda] = deriveBatchBufferPda(marketPda, program.programId);
+  const [poolPda] = derivePoolPda(marketPda, program.programId);
 
   let usdcMint: PublicKey;
   let vaultAta: PublicKey;
@@ -140,7 +159,7 @@ describe("perp engine e2e", () => {
       );
       expect(market.usdcMint.toBase58()).to.equal(usdcMint.toBase58());
       expect(market.usdcVault.toBase58()).to.equal(vaultAta.toBase58());
-      expect(market.batchWindowSlots.toNumber()).to.equal(5);
+      expect(market.batchWindowSlots.toNumber()).to.equal(50);
 
       const buffer = await program.account.batchBuffer.fetch(batchBufferPda);
       expect(buffer.nOrders).to.equal(0);
@@ -188,6 +207,47 @@ describe("perp engine e2e", () => {
           commitment: "confirmed",
         },
       );
+    });
+
+    it("funds the v0a liquidity pool (backstop counterparty)", async () => {
+      // v0a settles each batch against peers + a pool that absorbs the net
+      // imbalance, so the callback needs a funded Pool PDA to exist. Test
+      // funding is intentionally small (100 USDC) so it doesn't inflate the
+      // vault enough to perturb the 5%/slot withdraw-rate-limit test below;
+      // v0 has no pool balance check, so depth is symbolic here.
+      const adminAta = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        admin,
+        usdcMint,
+        admin.publicKey,
+      );
+      const funding = 100n * ONE_USDC;
+      await mintTo(
+        provider.connection,
+        admin,
+        usdcMint,
+        adminAta.address,
+        admin,
+        Number(funding),
+      );
+      await program.methods
+        .initPool(new anchor.BN(funding.toString()))
+        .accounts({
+          funder: admin.publicKey,
+          market: marketPda,
+          pool: poolPda,
+          usdcVault: vaultAta,
+          funderTokenAccount: adminAta.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([admin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      const pool = await program.account.pool.fetch(poolPda);
+      expect(pool.collateral.toString()).to.equal(funding.toString());
+      expect(pool.baseAmountLots.toString()).to.equal("0");
+      expect(pool.quoteEntry.toString()).to.equal("0");
     });
   });
 
@@ -376,9 +436,10 @@ describe("perp engine e2e", () => {
         setups.push({ kp: u, collateral, position });
       }
 
-      // Crossing orders at the same price -> match at the midpoint (also
-      // 100_000) -> fill_size = min(1000, 1000) = 1000. Oracle band ±5%
-      // is satisfied for oracle = 100_000.
+      // v0a: both orders cross the oracle (long price>=oracle, short
+      // price<=oracle) at the fixture price 100_000, so each fills its full
+      // size (1000). The two sides balance (long 1000 == short 1000), so the
+      // pool is untouched — this is the pure peer-to-peer case.
       const orderA: OrderPlaintext = {
         side: 0n,
         price: 100_000n,
@@ -422,8 +483,8 @@ describe("perp engine e2e", () => {
           .rpc({ skipPreflight: true, commitment: "confirmed" });
       }
 
-      // Wait for the batch window (5 slots @ 400ms ≈ 2s) to close.
-      await new Promise((r) => setTimeout(r, 3_000));
+      // Wait for the batch window to close (50 slots ≈ 20-25s on localnet).
+      await waitForBatchWindow();
 
       // Queue match_batch via process_batch. accountsPartial so we only
       // pin the Arcium-side accounts; Anchor infers the rest.
@@ -468,12 +529,15 @@ describe("perp engine e2e", () => {
       );
 
       const settled = await settledPromise;
-      // Clearing price comes from the synthetic Pyth fixture (price=100_000).
-      // Orders cross at midpoint 100_000; oracle band ±5% of 100_000 passes.
+      // v0a clears at the oracle (the synthetic fixture, 100_000). Both sides
+      // fill 1000; balanced (long == short) so the pool stays untouched.
       expect(settled.clearingPrice.toString()).to.equal("100000");
-      expect(settled.totalVolume.toString()).to.equal("1000");
-      expect(settled.ownerA.toBase58()).to.equal(alice.publicKey.toBase58());
-      expect(settled.ownerB.toBase58()).to.equal(bob.publicKey.toBase58());
+      expect(settled.totalLongBase.toString()).to.equal("1000");
+      expect(settled.totalShortBase.toString()).to.equal("1000");
+      expect(settled.poolBase.toString()).to.equal("0"); // balanced -> pool untouched
+      const filledOwners = settled.filledOwners.map((o) => o.toBase58());
+      expect(filledOwners).to.include(alice.publicKey.toBase58());
+      expect(filledOwners).to.include(bob.publicKey.toBase58());
 
       // Positions: alice long 1000 lots @ 100k -> base +1000, quote -1000*100k.
       //            bob short 1000 lots @ 100k  -> base -1000, quote +1000*100k.
@@ -617,6 +681,157 @@ describe("perp engine e2e", () => {
       expect(bobPosClosed.marginLocked.toString()).to.equal("0");
     });
 
+    it("a lone order fills against the pool (v0a — no brick)", async () => {
+      // The headline v0a fix: a single order with no peer counterparty no
+      // longer bricks the shared buffer. process_batch accepts n_orders >= 1,
+      // the order fills against the pool, and the pool takes the opposite side
+      // of the net. (Pre-v0a this required exactly 2 orders and would stall.)
+      const erin = Keypair.generate();
+      const sig = await provider.connection.requestAirdrop(erin.publicKey, 2e9);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+      const ata = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        admin,
+        usdcMint,
+        erin.publicKey,
+      );
+      await mintTo(
+        provider.connection,
+        admin,
+        usdcMint,
+        ata.address,
+        admin,
+        Number(200n * ONE_USDC),
+      );
+      const [collateral] = deriveUserCollateralPda(
+        marketPda,
+        erin.publicKey,
+        program.programId,
+      );
+      const [position] = derivePositionPda(
+        marketPda,
+        erin.publicKey,
+        program.programId,
+      );
+      await program.methods
+        .deposit(DEPOSIT_AMOUNT)
+        .accounts({
+          user: erin.publicKey,
+          market: marketPda,
+          userCollateral: collateral,
+          usdcVault: vaultAta,
+          userTokenAccount: ata.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([erin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      const poolBefore = await program.account.pool.fetch(poolPda);
+
+      // One long order, no counterparty.
+      const loneOrder: OrderPlaintext = {
+        side: 0n,
+        price: 100_000n,
+        size: 1_000n,
+        clientNonce: 55n,
+      };
+      const args = toSubmitOrderArgs(encryptOrder(loneOrder, mxePublicKey));
+      await program.methods
+        .submitOrder(
+          args.x25519Pubkey,
+          args.nonce,
+          PER_ORDER_MARGIN,
+          args.ctSide,
+          args.ctPrice,
+          args.ctSize,
+          args.ctClientNonce,
+        )
+        .accounts({
+          user: erin.publicKey,
+          market: marketPda,
+          batchBuffer: batchBufferPda,
+          userCollateral: collateral,
+          position,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([erin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+
+      // Exactly one order in the batch — v0a still processes it.
+      const bufBeforeCrank = await program.account.batchBuffer.fetch(batchBufferPda);
+      expect(bufBeforeCrank.nOrders).to.equal(1);
+
+      await waitForBatchWindow();
+
+      const computationOffset = new anchor.BN(randomBytes(8), "hex");
+      const compDefOffset = Buffer.from(
+        getCompDefAccOffset("match_batch"),
+      ).readUInt32LE();
+      const settledPromise = awaitEvent("batchSettledEvent");
+      await program.methods
+        .processBatch(computationOffset)
+        .accountsPartial({
+          payer: admin.publicKey,
+          mxeAccount: getMXEAccAddress(program.programId),
+          mempoolAccount: getMempoolAccAddress(arciumEnv.arciumClusterOffset),
+          executingPool: getExecutingPoolAccAddress(
+            arciumEnv.arciumClusterOffset,
+          ),
+          computationAccount: getComputationAccAddress(
+            arciumEnv.arciumClusterOffset,
+            computationOffset,
+          ),
+          compDefAccount: getCompDefAccAddress(program.programId, compDefOffset),
+          clusterAccount,
+          market: marketPda,
+          batchBuffer: batchBufferPda,
+          priceUpdate: pythPriceUpdate,
+        })
+        .signers([admin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+      await awaitComputationFinalization(
+        provider,
+        computationOffset,
+        program.programId,
+        "confirmed",
+      );
+
+      const settled = await settledPromise;
+      // Lone long: total_long=1000, total_short=0; the pool takes the short side.
+      expect(settled.totalLongBase.toString()).to.equal("1000");
+      expect(settled.totalShortBase.toString()).to.equal("0");
+      const filled = settled.filledOwners.map((o) => o.toBase58());
+      expect(filled).to.deep.equal([erin.publicKey.toBase58()]);
+
+      // erin is long 1000; the pool absorbed it by going short 1000.
+      const erinPos = await program.account.position.fetch(position);
+      expect(erinPos.baseAmountLots.toString()).to.equal("1000");
+      const poolAfter = await program.account.pool.fetch(poolPda);
+      const poolDelta =
+        BigInt(poolAfter.baseAmountLots.toString()) -
+        BigInt(poolBefore.baseAmountLots.toString());
+      expect(poolDelta.toString()).to.equal("-1000");
+
+      // No brick: the buffer reset for the next batch.
+      const buf = await program.account.batchBuffer.fetch(batchBufferPda);
+      expect(buf.nOrders).to.equal(0);
+      expect(buf.isProcessing).to.equal(false);
+
+      // Clean up so the open position doesn't linger into later tests.
+      await program.methods
+        .closePosition()
+        .accounts({
+          user: erin.publicKey,
+          market: marketPda,
+          position,
+          userCollateral: collateral,
+          priceUpdate: pythPriceUpdate,
+        })
+        .signers([erin])
+        .rpc({ skipPreflight: true, commitment: "confirmed" });
+    });
+
     it("liquidate gates: rejects healthy position + self-liquidation", async () => {
       // v0 localnet limitation: with a single synthetic Pyth fixture at
       // price 100_000 we can't drive a position underwater (entry = exit
@@ -716,7 +931,7 @@ describe("perp engine e2e", () => {
           .rpc({ skipPreflight: true, commitment: "confirmed" });
       }
 
-      await new Promise((r) => setTimeout(r, 3_000));
+      await waitForBatchWindow();
 
       const computationOffset = new anchor.BN(randomBytes(8), "hex");
       const compDefOffset = Buffer.from(

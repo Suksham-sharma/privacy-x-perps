@@ -21,98 +21,123 @@ mod toolchain_canary {
     }
 }
 
-// match_batch v0 — two-order uniform-price match.
+// match_batch (v0a) — N-order, oracle-pegged, pool-backstopped batch auction.
 //
-// Privacy model (v0 — see docs/circuit-v0.md "v0 vs v0.2"):
-//   - ORDERS are encrypted during matching — the moat. MPC sees plaintext only
-//     inside the circuit; no node sees an order's contents, preventing
-//     pre-trade leakage (front-running, strategy copying).
-//   - FILLS are revealed publicly via .reveal(); the callback applies each to
-//     UserCollateral / Position. Like a dark pool printing fills to the tape
-//     post-trade.
-//   - Not a regression vs encrypted-fill (Path B): v0's UserCollateral and
-//     Position PDAs are public, so a fill leaks its size through state deltas
-//     regardless of whether the instruction was encrypted. Hash-commit fill
-//     delivery only matters once Position is encrypted (v0.2, task #21).
+// Privacy model (the moat): ORDERS are encrypted during matching. MPC sees an
+// order's side/price/size in plaintext ONLY inside the circuit; no individual
+// node sees them, so nothing leaks pre-trade (no front-running / copy-trading).
+// FILLS are revealed (.reveal()) and the callback applies them — like a dark
+// pool printing to the tape post-trade. (v0 Positions are public on-chain, so a
+// revealed fill is no worse than the resulting state delta; encrypted positions
+// are v0.2.)
 //
-// Outputs (all PUBLIC, revealed via Struct{..}.reveal()):
-//   clearing_price — matched price; 0 if no match.
-//   total_volume   — sum of fills; equals fill_a_size in v0 (both sides trade
-//                    the same lots).
-//   fill_a_size    — lots filled for input a (0 if no match).
-//   fill_a_side    — 0 long / 1 short, copied through.
-//   fill_b_size/side — same for b.
-// The callback applies fill_a to orders[0].owner and fill_b to orders[1].owner.
+// Matching rule — every order that crosses the oracle fills its FULL size:
+//   long  fills iff price >= oracle   (willing to buy at/above oracle)
+//   short fills iff price <= oracle   (willing to sell at/below oracle)
+// Peers net against each other; a protocol liquidity pool (computed by the
+// callback from total_long_base - total_short_base) absorbs only the leftover
+// imbalance at the oracle price. When the two sides match exactly the pool is
+// untouched — it behaves like a pure peer-to-peer auction and only steps in for
+// the residual. Because every crossing order fills fully, nobody is rationed =>
+// NO pro-rata => NO MPC division (the costly primitive) and NO partial-fill
+// carry-over. An order that doesn't cross fills 0 and the callback refunds its
+// margin; nothing ever bricks or gets stuck.
+//
+// n_active (PUBLIC — the on-chain n_orders is already public) marks how many of
+// the N fixed slots hold a real order. Inactive slots are masked to a zero fill,
+// so process_batch can pad empty slots with any valid ciphertext envelope.
+//
+// Output (all PUBLIC, revealed):
+//   clearing_price    — = oracle (the pool guarantees execution at the oracle).
+//   total_long_base   — Σ filled long lots  } the callback derives the pool's
+//   total_short_base  — Σ filled short lots  } net position from these two.
+//   f{i}_size/f{i}_side — per-slot fill (lots, 0/1 side); applied to the
+//                         position owned by orders[i].owner.
 
 #[encrypted]
 mod circuits {
     use arcis::*;
+
+    // Fixed batch arity. Keep in sync with constants::MAX_ORDERS on the Anchor
+    // side (the buffer holds MAX_ORDERS slots; process_batch feeds all N here).
+    // N = 4: ~half the ACU of N=8, still a real multi-party batch.
 
     #[derive(Copy, Clone)]
     pub struct Order {
         pub side: u8,           // 0 = long, 1 = short
         pub price: u64,         // ticks
         pub size: u64,          // lots
-        pub client_nonce: u64,  // client-side correlation tag (not used on-chain)
+        pub client_nonce: u64,  // client-side correlation tag (unused on-chain)
     }
 
     #[derive(Copy, Clone)]
     pub struct BatchOutput {
         pub clearing_price: u64,
-        pub total_volume: u64,
-        pub fill_a_size: u64,
-        pub fill_a_side: u8,
-        pub fill_b_size: u64,
-        pub fill_b_side: u8,
+        pub total_long_base: u64,
+        pub total_short_base: u64,
+        pub f0_size: u64, pub f0_side: u8,
+        pub f1_size: u64, pub f1_side: u8,
+        pub f2_size: u64, pub f2_side: u8,
+        pub f3_size: u64, pub f3_side: u8,
     }
 
     #[instruction]
     pub fn match_batch(
-        a_ctxt: Enc<Shared, Order>,
-        b_ctxt: Enc<Shared, Order>,
+        o0: Enc<Shared, Order>,
+        o1: Enc<Shared, Order>,
+        o2: Enc<Shared, Order>,
+        o3: Enc<Shared, Order>,
+        n_active: u64,
         oracle_price: u64,
     ) -> BatchOutput {
-        let a = a_ctxt.to_arcis();
-        let b = b_ctxt.to_arcis();
+        let a0 = o0.to_arcis();
+        let a1 = o1.to_arcis();
+        let a2 = o2.to_arcis();
+        let a3 = o3.to_arcis();
 
-        // Pick out bid + ask without leaking which input was which.
-        let a_is_bid = a.side == 0u8;
-        let bid_price = if a_is_bid { a.price } else { b.price };
-        let ask_price = if a_is_bid { b.price } else { a.price };
-        let bid_size = if a_is_bid { a.size } else { b.size };
-        let ask_size = if a_is_bid { b.size } else { a.size };
+        let long0 = a0.side == 0u8;
+        let long1 = a1.side == 0u8;
+        let long2 = a2.side == 0u8;
+        let long3 = a3.side == 0u8;
 
-        // Sides must each be in {0, 1} and differ.
-        let valid_sides = a.side <= 1u8 && b.side <= 1u8 && a.side != b.side;
+        // Crosses the oracle (long buys at/above, short sells at/below).
+        let cross0 = if long0 { a0.price >= oracle_price } else { a0.price <= oracle_price };
+        let cross1 = if long1 { a1.price >= oracle_price } else { a1.price <= oracle_price };
+        let cross2 = if long2 { a2.price >= oracle_price } else { a2.price <= oracle_price };
+        let cross3 = if long3 { a3.price >= oracle_price } else { a3.price <= oracle_price };
 
-        // Orders cross.
-        let crossing = bid_price >= ask_price;
+        // active_i is a PUBLIC comparison (i is const, n_active is plaintext).
+        let fills0 = (0u64 < n_active) && (a0.side <= 1u8) && cross0;
+        let fills1 = (1u64 < n_active) && (a1.side <= 1u8) && cross1;
+        let fills2 = (2u64 < n_active) && (a2.side <= 1u8) && cross2;
+        let fills3 = (3u64 < n_active) && (a3.side <= 1u8) && cross3;
 
-        // Midpoint clearing price with u128 widening (overflow-safe).
-        let clearing = (((bid_price as u128) + (ask_price as u128)) / 2u128) as u64;
+        let s0 = if fills0 { a0.size } else { 0u64 };
+        let s1 = if fills1 { a1.size } else { 0u64 };
+        let s2 = if fills2 { a2.size } else { 0u64 };
+        let s3 = if fills3 { a3.size } else { 0u64 };
 
-        // Oracle band: clearing ∈ oracle * [9500/10000, 10500/10000].
-        let band_lo = (((oracle_price as u128) * 9500u128) / 10_000u128) as u64;
-        let band_hi = (((oracle_price as u128) * 10_500u128) / 10_000u128) as u64;
-        let in_band = clearing >= band_lo && clearing <= band_hi;
+        // Long/short base totals (u128 accumulation; the pool's signed net is
+        // derived on the Anchor side, which already does i128 math).
+        let total_long = (if long0 { s0 as u128 } else { 0u128 })
+            + (if long1 { s1 as u128 } else { 0u128 })
+            + (if long2 { s2 as u128 } else { 0u128 })
+            + (if long3 { s3 as u128 } else { 0u128 });
+        let total_short = (if long0 { 0u128 } else { s0 as u128 })
+            + (if long1 { 0u128 } else { s1 as u128 })
+            + (if long2 { 0u128 } else { s2 as u128 })
+            + (if long3 { 0u128 } else { s3 as u128 });
 
-        let matched = valid_sides && crossing && in_band;
-
-        // Fill size = min(bid_size, ask_size); zero on no-match.
-        let raw_fill_size = if bid_size < ask_size { bid_size } else { ask_size };
-        let final_fill_size = if matched { raw_fill_size } else { 0u64 };
-        let final_clearing = if matched { clearing } else { 0u64 };
-
-        // Reveal happens via Struct{..}.reveal() at the top level — outside
-        // any conditional. All fields collapse to a single committed value
-        // before reveal, so no branch information leaks.
+        // Reveal at the top level (outside any conditional) — every field
+        // collapses to a single committed value before reveal, no branch leaks.
         BatchOutput {
-            clearing_price: final_clearing,
-            total_volume: final_fill_size,
-            fill_a_size: final_fill_size,
-            fill_a_side: a.side,
-            fill_b_size: final_fill_size,
-            fill_b_side: b.side,
+            clearing_price: oracle_price,
+            total_long_base: total_long as u64,
+            total_short_base: total_short as u64,
+            f0_size: s0, f0_side: a0.side,
+            f1_size: s1, f1_side: a1.side,
+            f2_size: s2, f2_side: a2.side,
+            f3_size: s3, f3_side: a3.side,
         }
         .reveal()
     }

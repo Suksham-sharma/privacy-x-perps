@@ -18,7 +18,9 @@ import {
   TOKEN_PROGRAM_ID,
   createMint,
   getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
   getMint,
+  mintTo,
 } from "@solana/spl-token";
 import {
   getArciumProgram,
@@ -33,6 +35,7 @@ import {
 import {
   deriveMarketPda,
   deriveBatchBufferPda,
+  derivePoolPda,
   deriveMockOraclePda,
 } from "@confidential-perps/sdk";
 import { ConfidentialPerps } from "../target/types/confidential_perps";
@@ -43,6 +46,10 @@ import { createHash } from "crypto";
 
 const RPC = process.env.NEXT_PUBLIC_RPC_URL ?? "http://127.0.0.1:8899";
 const USDC_DECIMALS = 6;
+// Protocol liquidity backstop (v0a): the pool absorbs each batch's net
+// imbalance. Funded generously vs demo order sizes (~1 SOL) so it never runs
+// dry — the skew cap is the production guard (see constants.rs MAX_POOL_BASE).
+const POOL_FUNDING_USDC = 100_000;
 // SOL/USD Pyth feed id — same one pinned at init in lifecycle-driver / constants.
 const SOL_USD_FEED_ID_HEX =
   "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
@@ -198,6 +205,47 @@ async function main() {
       { skipPreflight: true, preflightCommitment: "confirmed", commitment: "confirmed" },
     );
     console.log("comp_def + circuit: OK");
+  }
+
+  // ---- liquidity pool backstop (v0a) ----
+  // Fund the singleton pool that backstops batch matching. Idempotent: skip if
+  // it already exists (init_pool would otherwise top it up on every re-run).
+  const [poolPda] = derivePoolPda(marketPda, program.programId);
+  const vaultAta = await getAssociatedTokenAddress(usdcMint, marketPda, true);
+  if (await connection.getAccountInfo(poolPda)) {
+    console.log("init_pool: SKIP (pool already funded)");
+  } else {
+    // Mint the funding to the faucet admin (the mint authority), then deposit
+    // it into the shared vault as the pool's protocol-owned buffer.
+    const funderAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      faucetAdmin,
+      usdcMint,
+      faucetAdmin.publicKey,
+    );
+    const fundingBase = BigInt(POOL_FUNDING_USDC) * BigInt(10 ** USDC_DECIMALS);
+    await mintTo(
+      connection,
+      faucetAdmin,
+      usdcMint,
+      funderAta.address,
+      faucetAdmin,
+      fundingBase,
+    );
+    await program.methods
+      .initPool(new anchor.BN(fundingBase.toString()))
+      .accounts({
+        funder: faucetAdmin.publicKey,
+        market: marketPda,
+        pool: poolPda,
+        usdcVault: vaultAta,
+        funderTokenAccount: funderAta.address,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([faucetAdmin])
+      .rpc({ skipPreflight: true, commitment: "confirmed" });
+    console.log(`init_pool: OK  funded ${POOL_FUNDING_USDC.toLocaleString()} USDC`);
   }
 
   // ---- mock oracle (DEMO/LOCALNET) ----

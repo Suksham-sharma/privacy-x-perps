@@ -1,13 +1,15 @@
-// process_batch — closes the open batch window and queues match_batch in
-// Arcium. Permissionless: anyone can trigger once the gates pass (n_orders == 2,
+// process_batch — closes the open batch window and queues match_batch (v0a) in
+// Arcium. Permissionless: anyone can trigger once the gates pass (>= 1 order,
 // window closed, not already in flight); pays Arcium fees via `payer`.
 //
-// v0 handles exactly 2 orders per batch (circuit-imposed); 1-order / 0-order /
-// timeout-refund flows are v0.2.
+// v0a matches 1..MAX_ORDERS orders against each other AND a liquidity pool
+// backstop, so a lone order no longer bricks the buffer — it fills against the
+// pool. The circuit has fixed arity MAX_ORDERS; empty slots are padded (with a
+// copy of orders[0]) and masked out by the public `n_active` count.
 use crate::{
     constants::{
-        BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, POSITION_SEED,
-        USER_COLLATERAL_SEED,
+        BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, MAX_ORDERS, POOL_SEED,
+        POSITION_SEED, USER_COLLATERAL_SEED,
     },
     error::ErrorCode,
     instructions::match_batch::MatchBatchCallback,
@@ -89,7 +91,6 @@ pub fn process_batch_handler(
     ctx: Context<ProcessBatch>,
     computation_offset: u64,
 ) -> Result<()> {
-    let buf = &mut ctx.accounts.batch_buffer;
     let market = &ctx.accounts.market;
 
     // Read the oracle price BEFORE any state mutation; if Pyth's stale or
@@ -100,10 +101,11 @@ pub fn process_batch_handler(
         &Clock::get()?,
     )?;
 
+    let buf = &mut ctx.accounts.batch_buffer;
     require!(!buf.is_processing, ErrorCode::BatchAlreadyProcessing);
-    // v0: exactly 2 orders — the circuit has fixed arity (see
-    // encrypted-ixs/src/lib.rs match_batch).
-    require!(buf.n_orders == 2, ErrorCode::BatchNotReady);
+    // v0a: any non-empty batch can settle (lone orders fill against the pool).
+    let n = buf.n_orders as usize;
+    require!(n >= 1, ErrorCode::BatchNotReady);
 
     let now_slot = Clock::get()?.slot;
     let closes_at = buf
@@ -115,62 +117,73 @@ pub fn process_batch_handler(
     // Required by the queue_computation_accounts macro pattern.
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
-    let a = buf.orders[0];
-    let b = buf.orders[1];
-
-    // Build the circuit args. Each Enc<Shared, Order> is one pubkey + one
-    // nonce + the field ciphertexts in struct order (side u8, price u64,
-    // size u64, client_nonce u64 — matches encrypted-ixs Order).
-    let args = ArgBuilder::new()
-        // Order A
-        .x25519_pubkey(a.x25519_pubkey)
-        .plaintext_u128(a.nonce)
-        .encrypted_u8(a.ct_side)
-        .encrypted_u64(a.ct_price)
-        .encrypted_u64(a.ct_size)
-        .encrypted_u64(a.ct_client_nonce)
-        // Order B
-        .x25519_pubkey(b.x25519_pubkey)
-        .plaintext_u128(b.nonce)
-        .encrypted_u8(b.ct_side)
-        .encrypted_u64(b.ct_price)
-        .encrypted_u64(b.ct_size)
-        .encrypted_u64(b.ct_client_nonce)
-        // Public oracle price
+    // Build the circuit args: MAX_ORDERS Enc<Shared, Order> envelopes, then the
+    // public n_active count, then the public oracle price. Each Enc is one
+    // x25519 pubkey + one nonce + the field ciphertexts in struct order
+    // (side u8, price u64, size u64, client_nonce u64 — matches encrypted-ixs
+    // Order). Slots >= n_orders are padded with a copy of orders[0]; the circuit
+    // masks them via n_active so the duplicate never affects the result (and we
+    // avoid feeding an all-zero, invalid x25519 pubkey into decryption).
+    let mut args = ArgBuilder::new();
+    for i in 0..MAX_ORDERS {
+        let o = if i < n { buf.orders[i] } else { buf.orders[0] };
+        args = args
+            .x25519_pubkey(o.x25519_pubkey)
+            .plaintext_u128(o.nonce)
+            .encrypted_u8(o.ct_side)
+            .encrypted_u64(o.ct_price)
+            .encrypted_u64(o.ct_size)
+            .encrypted_u64(o.ct_client_nonce);
+    }
+    let args = args
+        .plaintext_u64(buf.n_orders as u64)
         .plaintext_u64(oracle_price)
         .build();
 
-    // Derive the 6 extra accounts the callback needs, in the order its
-    // Accounts struct expects (see MatchBatchCallback doc comment).
+    // Derive the callback's extra accounts in the order MatchBatchCallback
+    // declares them:
+    //   [market, batch_buffer, pool, position_0..3, user_collateral_0..3]
+    // The pool + per-slot position/collateral PDAs derive against
+    // batch_buffer.orders[i].owner, so the callback must NOT reset the buffer
+    // before reading them — it resets after fills land. Slots >= n_orders are
+    // filled with the market key (the callback ignores them).
     let market_key = market.key();
-    let (position_a, _) = Pubkey::find_program_address(
-        &[POSITION_SEED, market_key.as_ref(), a.owner.as_ref()],
-        &crate::ID,
-    );
-    let (position_b, _) = Pubkey::find_program_address(
-        &[POSITION_SEED, market_key.as_ref(), b.owner.as_ref()],
-        &crate::ID,
-    );
-    let (uc_a, _) = Pubkey::find_program_address(
-        &[USER_COLLATERAL_SEED, market_key.as_ref(), a.owner.as_ref()],
-        &crate::ID,
-    );
-    let (uc_b, _) = Pubkey::find_program_address(
-        &[USER_COLLATERAL_SEED, market_key.as_ref(), b.owner.as_ref()],
-        &crate::ID,
-    );
+    let (pool_key, _) =
+        Pubkey::find_program_address(&[POOL_SEED, market_key.as_ref()], &crate::ID);
 
+    let mut positions = [market_key; MAX_ORDERS];
+    let mut collaterals = [market_key; MAX_ORDERS];
+    for i in 0..n {
+        let owner = buf.orders[i].owner;
+        positions[i] = Pubkey::find_program_address(
+            &[POSITION_SEED, market_key.as_ref(), owner.as_ref()],
+            &crate::ID,
+        )
+        .0;
+        collaterals[i] = Pubkey::find_program_address(
+            &[USER_COLLATERAL_SEED, market_key.as_ref(), owner.as_ref()],
+            &crate::ID,
+        )
+        .0;
+    }
+
+    let buf_key = buf.key();
     let extra_accs = [
         CallbackAccount { pubkey: market_key, is_writable: false },
-        CallbackAccount { pubkey: buf.key(), is_writable: true },
-        CallbackAccount { pubkey: position_a, is_writable: true },
-        CallbackAccount { pubkey: position_b, is_writable: true },
-        CallbackAccount { pubkey: uc_a, is_writable: true },
-        CallbackAccount { pubkey: uc_b, is_writable: true },
+        CallbackAccount { pubkey: buf_key, is_writable: true },
+        CallbackAccount { pubkey: pool_key, is_writable: true },
+        CallbackAccount { pubkey: positions[0], is_writable: true },
+        CallbackAccount { pubkey: positions[1], is_writable: true },
+        CallbackAccount { pubkey: positions[2], is_writable: true },
+        CallbackAccount { pubkey: positions[3], is_writable: true },
+        CallbackAccount { pubkey: collaterals[0], is_writable: true },
+        CallbackAccount { pubkey: collaterals[1], is_writable: true },
+        CallbackAccount { pubkey: collaterals[2], is_writable: true },
+        CallbackAccount { pubkey: collaterals[3], is_writable: true },
     ];
 
-    // Flip the gate BEFORE queueing — so a callback retry or a fast
-    // re-call cannot race a second queue_computation onto the same orders.
+    // Flip the gate BEFORE queueing — so a callback retry or a fast re-call
+    // cannot race a second queue_computation onto the same orders.
     buf.is_processing = true;
 
     queue_computation(

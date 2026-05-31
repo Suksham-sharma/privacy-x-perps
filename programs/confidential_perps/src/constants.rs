@@ -48,6 +48,11 @@ pub const USER_COLLATERAL_SEED: &[u8] = b"collateral";
 #[constant]
 pub const POSITION_SEED: &[u8] = b"position";
 
+// Singleton liquidity pool per market — the guaranteed counterparty that
+// absorbs the net imbalance of each batch at the oracle price (v0a).
+#[constant]
+pub const POOL_SEED: &[u8] = b"pool";
+
 // DEMO/LOCALNET ONLY (feature = "mock-oracle"): seed for the program-owned
 // PriceUpdateV2 mock account a localnet crank keeps fresh. See set_mock_oracle.
 #[cfg(feature = "mock-oracle")]
@@ -58,8 +63,18 @@ pub const MOCK_ORACLE_SEED: &[u8] = b"mock_oracle";
 pub const WITHDRAW_RATE_LIMIT_BPS: u64 = 500;
 pub const BPS_DENOMINATOR: u64 = 10_000;
 
-// Batch auction params. Tune in Week 3 once we measure ACUs.
-pub const MAX_ORDERS: usize = 8;
+// Batch auction params. Fixed circuit arity — MUST equal the N the match_batch
+// circuit is compiled for (encrypted-ixs/src/lib.rs). N=4 measured ~1B ACU
+// (N=8 was 1.96B); 4 keeps the callback account list small while still being a
+// real multi-party batch.
+pub const MAX_ORDERS: usize = 4;
+
+// Skew cap (v0a safety): the largest absolute net base position the pool is
+// allowed to hold. NOTE: enforcement is deferred one step — v0 funds the pool
+// generously and relies on small demo order sizes + the oracle-confidence gate;
+// the circuit-side cap (zero fills that would breach this) is the next
+// hardening pass. Tracked here so it's not silently absent.
+pub const MAX_POOL_BASE: u64 = 1_000_000;
 
 // Batch window. 5 slots (~2s) is fine for the tight back-to-back submits in the
 // test/lifecycle-driver, but unusable for a human-paced UI where one side is

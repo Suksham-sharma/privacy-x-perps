@@ -6,6 +6,7 @@ export const MARKET_SEED = Buffer.from("market");
 export const BATCH_BUFFER_SEED = Buffer.from("batch");
 export const USER_COLLATERAL_SEED = Buffer.from("collateral");
 export const POSITION_SEED = Buffer.from("position");
+export const POOL_SEED = Buffer.from("pool");
 // DEMO/LOCALNET ONLY: program-owned mock PriceUpdateV2 a localnet crank keeps
 // fresh (program built with feature = "mock-oracle"). See set_mock_oracle.rs.
 export const MOCK_ORACLE_SEED = Buffer.from("mock_oracle");
@@ -42,6 +43,17 @@ export function derivePositionPda(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [POSITION_SEED, market.toBuffer(), owner.toBuffer()],
+    programId,
+  );
+}
+
+// Singleton liquidity pool per market (v0a) — the batch counterparty/backstop.
+export function derivePoolPda(
+  market: PublicKey,
+  programId: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [POOL_SEED, market.toBuffer()],
     programId,
   );
 }

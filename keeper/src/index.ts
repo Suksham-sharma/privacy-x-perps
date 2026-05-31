@@ -1,8 +1,10 @@
 // Liquidation + batch cranker keeper.
 //
 // Two jobs run on a poll loop:
-//   1. Batch cranker — when BatchBuffer has 2 orders + window closed +
-//      !is_processing, call (permissionless) process_batch as `payer`.
+//   1. Batch cranker — when BatchBuffer has >= 1 order + window closed +
+//      !is_processing, call (permissionless) process_batch as `payer` (v0a:
+//      orders match peer-to-peer + against a pool backstop, so a lone order
+//      fills against the pool rather than bricking the buffer).
 //   2. Liquidator — for each open Position, read the Pyth price, compute
 //      credit = margin + base*price + quote, and call liquidate_position when
 //      credit < margin/2 (50% maintenance).
@@ -141,7 +143,9 @@ async function maybeCrank(
   }
 
   if (buf.isProcessing) return;
-  if (buf.nOrders !== 2) return;
+  // v0a: any non-empty batch can settle (orders fill against each other and a
+  // pool backstop; a lone order fills against the pool instead of bricking).
+  if (buf.nOrders < 1) return;
 
   const nowSlot = await program.provider.connection.getSlot();
   const closesAt =

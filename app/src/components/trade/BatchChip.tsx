@@ -1,6 +1,6 @@
 "use client";
 // Live batch-auction status: which batch is filling, how many orders are queued
-// (n/8), and whether the keeper is mid-match. Reads the BatchBuffer PDA.
+// (n/4), and whether the keeper is mid-match. Reads the BatchBuffer PDA.
 import { useBatchBuffer } from "@/hooks/useBatchBuffer";
 
 export function BatchChip() {
@@ -19,7 +19,7 @@ export function BatchChip() {
   return (
     <span className={`bchip ${matching ? "matching" : ""}`}>
       <span className={`bpip ${matching ? "live" : "idle"}`} />
-      BATCH #{data.batchId.toString()} · {data.nOrders}/8 ·{" "}
+      BATCH #{data.batchId.toString()} · {data.nOrders}/4 ·{" "}
       {matching ? "matching…" : "sealed"}
     </span>
   );

@@ -36,7 +36,8 @@ export function useFillHistory(): Fill[] {
         qc.invalidateQueries({ queryKey: ["batchBuffer"] });
         const you =
           !!publicKey &&
-          (e.ownerA?.equals?.(publicKey) || e.ownerB?.equals?.(publicKey));
+          Array.isArray(e.filledOwners) &&
+          e.filledOwners.some((o: any) => o?.equals?.(publicKey));
         const fill: Fill = {
           batchId: BigInt(e.batchId.toString()),
           clearingPrice: BigInt(e.clearingPrice.toString()),

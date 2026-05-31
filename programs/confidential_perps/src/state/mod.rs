@@ -122,3 +122,31 @@ impl Position {
     // discriminator + owner + base + quote + margin + bump
     pub const SIZE: usize = 8 + 32 + 8 + 16 + 8 + 1;
 }
+
+// Singleton liquidity pool per market (v0a) — the guaranteed counterparty.
+// Each batch, peers net against each other and the pool absorbs only the
+// leftover imbalance at the oracle clearing price: pool base += (short - long).
+// When the two sides match exactly, the pool is untouched (pure peer-to-peer).
+//
+// `base_amount_lots` / `quote_entry` mirror Position's units (signed lots; cost
+// basis in lot-ticks ≈ USDC base units in v0) so the pool's mark-to-market PnL
+// is `base_amount_lots * mark + quote_entry`, same formula as a user position.
+//
+// `collateral` records the protocol funding deposited into Market.usdc_vault at
+// init_pool. v0 simplification: the pool's effective equity is the vault buffer
+// (vault balance in excess of Σ user collateral); trader PnL is paid from /
+// absorbed by that shared buffer rather than reconciled into `collateral` every
+// batch. Continuous solvency settlement + the MAX_POOL_BASE skew cap are the
+// next hardening pass — see constants.rs. Demo sizes are tiny vs the funding.
+#[account]
+pub struct Pool {
+    pub base_amount_lots: i64,
+    pub quote_entry: i128,
+    pub collateral: u64,
+    pub bump: u8,
+}
+
+impl Pool {
+    // discriminator + base + quote + collateral + bump
+    pub const SIZE: usize = 8 + 8 + 16 + 8 + 1;
+}
