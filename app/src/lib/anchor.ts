@@ -4,8 +4,11 @@
 import { useMemo } from "react";
 import { AnchorProvider, Program } from "@anchor-lang/core";
 import { useConnection, useAnchorWallet } from "@solana/wallet-adapter-react";
-import idl from "../../../target/idl/confidential_perps.json";
-import type { ConfidentialPerps } from "../../../target/types/confidential_perps";
+// Vendored from target/idl + target/types (gitignored build artifacts, absent on
+// Vercel). Re-copy both into app/src/idl/ after a program change: arcium build
+// regenerates target/, then `cp target/idl/*.json target/types/*.ts app/src/idl/`.
+import idl from "@/idl/confidential_perps.json";
+import type { ConfidentialPerps } from "@/idl/confidential_perps";
 
 export function useProgram(): Program<ConfidentialPerps> | null {
   const { connection } = useConnection();

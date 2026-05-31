@@ -1,26 +1,27 @@
-// Cluster-agnostic runtime config from NEXT_PUBLIC_* env with localnet defaults
-// (bootstrap emits .env.local; devnet flip is just different env). Program ID is
-// stable across clusters.
+// Cluster-agnostic runtime config from NEXT_PUBLIC_* env. Defaults are the live
+// DEVNET deployment, so the app works on Vercel even if an env var is missing
+// (never falls back to localhost). Localnet dev overrides via .env.local
+// (scripts/localnet-bootstrap.ts emits it).
 import { PublicKey } from "@solana/web3.js";
 
 export const RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_URL ?? "http://127.0.0.1:8899";
+  process.env.NEXT_PUBLIC_RPC_URL ?? "https://api.devnet.solana.com";
 
 export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_PROGRAM_ID ??
     "EhTFnsoyZp9aRYoZrFPVPtokiRLwjxvAgZAuEQG8yZgF",
 );
 
-// Localnet arcium cluster is always offset 0 (see lifecycle-driver.ts).
+// Public Arcium devnet cluster offset (localnet is 0 — set via env for local dev).
 export const ARCIUM_CLUSTER_OFFSET = Number(
-  process.env.NEXT_PUBLIC_ARCIUM_CLUSTER_OFFSET ?? "0",
+  process.env.NEXT_PUBLIC_ARCIUM_CLUSTER_OFFSET ?? "456",
 );
 
-// Unknown until bootstrap mints the localnet USDC mint; null is a valid
-// "not configured yet" state the Collateral panel handles in a later phase.
-export const USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT
-  ? new PublicKey(process.env.NEXT_PUBLIC_USDC_MINT)
-  : null;
+// Devnet USDC mint we control (scripts/.devnet-state.json). Localnet overrides via env.
+export const USDC_MINT = new PublicKey(
+  process.env.NEXT_PUBLIC_USDC_MINT ??
+    "9oCp3qLSCrGWs97b6Mq9MVMUsRgBw3tSRtfPtT2XA9tR",
+);
 
 // Canonical SOL/USD sponsored PriceUpdateV2 address — the localnet fixture is
 // seeded at this same address (see build-pyth-fixture.mjs / devnet-init.ts).
