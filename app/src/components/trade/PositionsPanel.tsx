@@ -14,8 +14,11 @@ import {
 } from "@confidential-perps/sdk";
 import { useProgram } from "@/lib/anchor";
 import { usePosition } from "@/hooks/usePosition";
+import { useIndexPrice } from "@/hooks/useIndexPrice";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 import { PROGRAM_ID, PYTH_PRICE_UPDATE } from "@/lib/config";
-import { fmtUsdc, INDEX_PRICE_TICKS } from "@/lib/format";
+import { fmtUsdc } from "@/lib/format";
+import { friendlyError } from "@/lib/errors";
 
 const abs = (x: bigint) => (x < 0n ? -x : x);
 
@@ -23,9 +26,11 @@ export function PositionsPanel() {
   const program = useProgram();
   const { publicKey } = useWallet();
   const pos = usePosition();
+  const index = useIndexPrice();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "ok" | "err" | "info"; msg: string } | null>(null);
+  useAutoDismiss(status, () => setStatus(null));
 
   async function close() {
     if (!program || !publicKey) return;
@@ -49,7 +54,7 @@ export function PositionsPanel() {
       qc.invalidateQueries({ queryKey: ["position"] });
       qc.invalidateQueries({ queryKey: ["userCollateral"] });
     } catch (e) {
-      setStatus({ tone: "err", msg: (e as Error).message });
+      setStatus({ tone: "err", msg: friendlyError(e) });
     } finally {
       setBusy(false);
     }
@@ -61,16 +66,17 @@ export function PositionsPanel() {
     return <div className="pane-empty">No open position — submit an order to open one.</div>;
   }
 
+  const indexPrice = index.data ?? null;
   const isLong = p.baseAmountLots > 0n;
   const size = abs(p.baseAmountLots);
   const entry = size > 0n ? abs(p.quoteEntry) / size : 0n;
-  const upnl = p.baseAmountLots * INDEX_PRICE_TICKS + p.quoteEntry;
+  const upnl = indexPrice !== null ? p.baseAmountLots * indexPrice + p.quoteEntry : 0n;
   // Simple liquidation estimate (no funding/maintenance in v0): the price move
   // that exhausts locked margin against entry notional.
   const notionalAtEntry = Number(abs(p.quoteEntry)) || 1;
   const frac = Number(p.marginLocked) / notionalAtEntry;
   const entryNum = Number(entry);
-  const liq = Math.round(isLong ? entryNum * (1 - frac) : entryNum * (1 + frac));
+  const liq = BigInt(Math.round(isLong ? entryNum * (1 - frac) : entryNum * (1 + frac)));
   const fmt = (n: number) => n.toLocaleString("en-US");
 
   return (
@@ -89,10 +95,10 @@ export function PositionsPanel() {
         <span className="side">
           <span className={`tag ${isLong ? "long" : "short"}`}>{isLong ? "Long" : "Short"}</span> SOL-PERP
         </span>
-        <span className="c">{fmt(Number(size))}</span>
-        <span className="c">{fmt(Number(entry))}</span>
-        <span className="c">{fmt(Number(INDEX_PRICE_TICKS))}</span>
-        <span className="c">{fmt(liq)}</span>
+        <span className="c">{fmt(Number(size))} SOL</span>
+        <span className="c">${fmtUsdc(entry)}</span>
+        <span className="c">{indexPrice !== null ? `$${fmtUsdc(indexPrice)}` : "—"}</span>
+        <span className="c">${fmtUsdc(liq)}</span>
         <span className="c">{fmtUsdc(p.marginLocked)}</span>
         <span className={`c ${upnl > 0n ? "long" : upnl < 0n ? "short" : ""}`}>{fmtUsdc(upnl)}</span>
         <span style={{ textAlign: "right" }}>

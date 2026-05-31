@@ -17,7 +17,7 @@
 //   KEEPER_INTERVAL_MS      (default 3000)
 //   KEEPER_ONCE             (truthy → run one cycle and exit; for tests/cron)
 
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import * as anchor from "@anchor-lang/core";
 import { Program } from "@anchor-lang/core";
 import {
@@ -33,6 +33,7 @@ import {
   deriveMarketPda,
   deriveBatchBufferPda,
   deriveUserCollateralPda,
+  deriveMockOraclePda,
 } from "@confidential-perps/sdk";
 import { randomBytes } from "crypto";
 import * as fs from "fs";
@@ -46,11 +47,16 @@ process.env.ARCIUM_CLUSTER_OFFSET ??= "0";
 const POLL_MS = Number(process.env.KEEPER_INTERVAL_MS ?? 3000);
 const CLUSTER_OFFSET = Number(process.env.ARCIUM_CLUSTER_OFFSET);
 const RPC_URL = process.env.SOLANA_RPC_URL ?? "http://localhost:8899";
-const PYTH_PRICE_UPDATE = new PublicKey(
-  process.env.PYTH_PRICE_UPDATE ??
-    "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE",
-);
+// DEMO/LOCALNET: the price account is the program-owned mock PriceUpdateV2
+// (derived in main from the program id) unless PYTH_PRICE_UPDATE is set. The
+// keeper both READS it (crank/liquidation) and WRITES it (live oracle pusher).
+const PYTH_PRICE_OVERRIDE = process.env.PYTH_PRICE_UPDATE
+  ? new PublicKey(process.env.PYTH_PRICE_UPDATE)
+  : null;
 const ONCE = !!process.env.KEEPER_ONCE;
+// How often to push a fresh price (multiple of POLL ticks). Keep SOL/USD live
+// without spamming a tx every single tick.
+const ORACLE_PUSH_EVERY_TICKS = Number(process.env.ORACLE_PUSH_EVERY_TICKS ?? 1);
 
 function ts() {
   return new Date().toISOString().slice(11, 23);
@@ -74,11 +80,54 @@ function readPythPrice(data: Buffer): bigint {
   return data.readBigInt64LE(priceOffset);
 }
 
+// Live SOL/USD spot from Binance (same source the chart uses). Returns the
+// price in the protocol's index units = USD * 1e6 (so $82.41 -> 82_410_000),
+// which doubles as USDC base units per SOL (1 lot = 1 SOL). null on failure.
+const PRICE_SCALE = 1_000_000n;
+async function fetchSolPriceUnits(): Promise<bigint | null> {
+  try {
+    const res = await fetch(
+      "https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT",
+    );
+    if (!res.ok) return null;
+    const j = (await res.json()) as { price?: string };
+    const usd = Number(j.price);
+    if (!Number.isFinite(usd) || usd <= 0) return null;
+    return BigInt(Math.round(usd * Number(PRICE_SCALE)));
+  } catch {
+    return null;
+  }
+}
+
+// DEMO/LOCALNET oracle pusher: write live SOL/USD into the program-owned mock
+// PriceUpdateV2 so the engine (band check, PnL, liquidation) reads a ticking
+// price. No-op if the live fetch fails (keeps the last on-chain value).
+async function maybePushOracle(
+  program: Program<any>,
+  oraclePda: PublicKey,
+  authority: PublicKey,
+) {
+  const priceUnits = await fetchSolPriceUnits();
+  if (priceUnits === null) {
+    log("oracle push skipped — SOL price fetch failed");
+    return;
+  }
+  await program.methods
+    .setMockOracle(new anchor.BN(priceUnits.toString()))
+    .accounts({
+      authority,
+      mockOracle: oraclePda,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc({ skipPreflight: true, commitment: "confirmed" });
+}
+
 async function maybeCrank(
   program: Program<any>,
   marketPda: PublicKey,
   batchBufferPda: PublicKey,
   payer: PublicKey,
+  priceAccount: PublicKey,
 ) {
   let market: any;
   let buf: any;
@@ -118,7 +167,7 @@ async function maybeCrank(
       clusterAccount: getClusterAccAddress(CLUSTER_OFFSET),
       market: marketPda,
       batchBuffer: batchBufferPda,
-      priceUpdate: PYTH_PRICE_UPDATE,
+      priceUpdate: priceAccount,
     })
     .rpc({ skipPreflight: true, commitment: "confirmed" });
   log("crank → process_batch queued", {
@@ -131,10 +180,11 @@ async function maybeLiquidate(
   program: Program<any>,
   marketPda: PublicKey,
   liquidator: PublicKey,
+  priceAccount: PublicKey,
 ) {
   // Pyth price (raw bytes — we only need the i64 mantissa).
   const pythAcc = await program.provider.connection.getAccountInfo(
-    PYTH_PRICE_UPDATE,
+    priceAccount,
   );
   if (!pythAcc) {
     log("pyth account missing, skipping liquidations");
@@ -168,7 +218,7 @@ async function maybeLiquidate(
           market: marketPda,
           position: posPda,
           userCollateral: uc,
-          priceUpdate: PYTH_PRICE_UPDATE,
+          priceUpdate: priceAccount,
         })
         .rpc({ skipPreflight: true, commitment: "confirmed" });
       log("liquidated", {
@@ -191,14 +241,24 @@ async function tick(
   marketPda: PublicKey,
   batchBufferPda: PublicKey,
   payer: PublicKey,
+  priceAccount: PublicKey,
+  tickNo: number,
 ) {
+  // Push the live price FIRST so crank/liquidation read a fresh oracle.
+  if (tickNo % ORACLE_PUSH_EVERY_TICKS === 0) {
+    try {
+      await maybePushOracle(program, priceAccount, payer);
+    } catch (e: any) {
+      log("oracle push err", { err: String(e?.message ?? e).slice(0, 120) });
+    }
+  }
   try {
-    await maybeCrank(program, marketPda, batchBufferPda, payer);
+    await maybeCrank(program, marketPda, batchBufferPda, payer, priceAccount);
   } catch (e: any) {
     log("crank err", { err: String(e?.message ?? e).slice(0, 120) });
   }
   try {
-    await maybeLiquidate(program, marketPda, payer);
+    await maybeLiquidate(program, marketPda, payer, priceAccount);
   } catch (e: any) {
     log("liq sweep err", { err: String(e?.message ?? e).slice(0, 120) });
   }
@@ -227,6 +287,8 @@ async function main() {
   const program = new Program(idl, provider);
   const [marketPda] = deriveMarketPda(program.programId);
   const [batchBufferPda] = deriveBatchBufferPda(marketPda, program.programId);
+  const priceAccount =
+    PYTH_PRICE_OVERRIDE ?? deriveMockOraclePda(program.programId)[0];
 
   log("keeper start", {
     rpc: RPC_URL,
@@ -234,11 +296,12 @@ async function main() {
     payer: wallet.publicKey.toBase58().slice(0, 8) + "…",
     cluster: CLUSTER_OFFSET,
     interval_ms: POLL_MS,
+    priceAccount: priceAccount.toBase58().slice(0, 8) + "…",
     once: ONCE,
   });
 
   if (ONCE) {
-    await tick(program, marketPda, batchBufferPda, wallet.publicKey);
+    await tick(program, marketPda, batchBufferPda, wallet.publicKey, priceAccount, 0);
     return;
   }
 
@@ -248,8 +311,10 @@ async function main() {
     log("SIGINT — shutting down after current tick");
   });
 
+  let tickNo = 0;
   while (!stopped) {
-    await tick(program, marketPda, batchBufferPda, wallet.publicKey);
+    await tick(program, marketPda, batchBufferPda, wallet.publicKey, priceAccount, tickNo);
+    tickNo++;
     if (stopped) break;
     await new Promise((r) => setTimeout(r, POLL_MS));
   }

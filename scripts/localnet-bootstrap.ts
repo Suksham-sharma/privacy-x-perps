@@ -30,7 +30,11 @@ import {
   getLookupTableAddress,
   uploadCircuit,
 } from "@arcium-hq/client";
-import { deriveMarketPda, deriveBatchBufferPda } from "@confidential-perps/sdk";
+import {
+  deriveMarketPda,
+  deriveBatchBufferPda,
+  deriveMockOraclePda,
+} from "@confidential-perps/sdk";
 import { ConfidentialPerps } from "../target/types/confidential_perps";
 import * as fs from "fs";
 import * as os from "os";
@@ -42,9 +46,6 @@ const USDC_DECIMALS = 6;
 // SOL/USD Pyth feed id — same one pinned at init in lifecycle-driver / constants.
 const SOL_USD_FEED_ID_HEX =
   "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
-// Canonical SOL/USD sponsored PriceUpdateV2 address — the localnet fixture is
-// loaded here by Anchor.toml's [[test.validator.account]] at validator startup.
-const PYTH_PRICE_UPDATE = "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE";
 
 // Deterministic localnet faucet keypair (USDC mint authority + faucet signer).
 const faucetAdmin = Keypair.fromSeed(
@@ -78,6 +79,25 @@ async function mxeWithRetry(
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error("MXE pubkey unavailable — is `arcium localnet` running?");
+}
+
+// Live SOL/USD spot in the protocol's index units (USD * 1e6). Falls back to a
+// sane localnet default so bootstrap never blocks on the network.
+const PRICE_SCALE = 1_000_000;
+async function fetchSolPriceUnits(): Promise<bigint> {
+  try {
+    const res = await fetch(
+      "https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT",
+    );
+    if (res.ok) {
+      const j = (await res.json()) as { price?: string };
+      const usd = Number(j.price);
+      if (Number.isFinite(usd) && usd > 0) {
+        return BigInt(Math.round(usd * PRICE_SCALE));
+      }
+    }
+  } catch {}
+  return 150n * BigInt(PRICE_SCALE); // fallback: $150.00
 }
 
 async function main() {
@@ -180,6 +200,25 @@ async function main() {
     console.log("comp_def + circuit: OK");
   }
 
+  // ---- mock oracle (DEMO/LOCALNET) ----
+  // Seed the program-owned mock PriceUpdateV2 with a live SOL/USD price so the
+  // engine + UI read a realistic mark immediately. The keeper's pusher keeps it
+  // ticking afterward. Requires the program built with feature = "mock-oracle".
+  const [mockOraclePda] = deriveMockOraclePda(program.programId);
+  const seedPrice = await fetchSolPriceUnits();
+  await program.methods
+    .setMockOracle(new anchor.BN(seedPrice.toString()))
+    .accounts({
+      authority: admin.publicKey,
+      mockOracle: mockOraclePda,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc({ skipPreflight: true, commitment: "confirmed" });
+  console.log(
+    `mock oracle: OK  ${mockOraclePda.toBase58().slice(0, 8)}… seeded @ ` +
+      `$${(Number(seedPrice) / 1e6).toFixed(2)}`,
+  );
+
   // ---- emit app/.env.local ----
   const env =
     [
@@ -190,7 +229,7 @@ async function main() {
       `NEXT_PUBLIC_PROGRAM_ID=${program.programId.toBase58()}`,
       "NEXT_PUBLIC_ARCIUM_CLUSTER_OFFSET=0",
       `NEXT_PUBLIC_USDC_MINT=${usdcMint.toBase58()}`,
-      `NEXT_PUBLIC_PYTH_PRICE_UPDATE=${PYTH_PRICE_UPDATE}`,
+      `NEXT_PUBLIC_PYTH_PRICE_UPDATE=${mockOraclePda.toBase58()}`,
       `FAUCET_ADMIN_SECRET=[${Array.from(faucetAdmin.secretKey).join(",")}]`,
     ].join("\n") + "\n";
 

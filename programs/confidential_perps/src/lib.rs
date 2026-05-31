@@ -107,4 +107,11 @@ pub mod confidential_perps {
     pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
         liquidate_position::liquidate_position_handler(ctx)
     }
+
+    // DEMO/LOCALNET ONLY (feature = "mock-oracle"): a localnet crank calls this
+    // to push a live SOL/USD price into the program-owned mock PriceUpdateV2.
+    #[cfg(feature = "mock-oracle")]
+    pub fn set_mock_oracle(ctx: Context<SetMockOracle>, price: i64) -> Result<()> {
+        set_mock_oracle::set_mock_oracle_handler(ctx, price)
+    }
 }

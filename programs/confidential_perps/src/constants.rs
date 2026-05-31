@@ -48,6 +48,12 @@ pub const USER_COLLATERAL_SEED: &[u8] = b"collateral";
 #[constant]
 pub const POSITION_SEED: &[u8] = b"position";
 
+// DEMO/LOCALNET ONLY (feature = "mock-oracle"): seed for the program-owned
+// PriceUpdateV2 mock account a localnet crank keeps fresh. See set_mock_oracle.
+#[cfg(feature = "mock-oracle")]
+#[constant]
+pub const MOCK_ORACLE_SEED: &[u8] = b"mock_oracle";
+
 // Drift-hack defensive: per-slot withdrawal cap = 5% of vault snapshot.
 pub const WITHDRAW_RATE_LIMIT_BPS: u64 = 500;
 pub const BPS_DENOMINATOR: u64 = 10_000;

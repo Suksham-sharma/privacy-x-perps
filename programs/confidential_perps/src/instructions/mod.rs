@@ -6,6 +6,8 @@ pub mod init_market;
 pub mod liquidate_position;
 pub mod match_batch;
 pub mod process_batch;
+#[cfg(feature = "mock-oracle")]
+pub mod set_mock_oracle;
 pub mod submit_order;
 pub mod withdraw;
 
@@ -17,5 +19,7 @@ pub use init_market::*;
 pub use liquidate_position::*;
 pub use match_batch::*;
 pub use process_batch::*;
+#[cfg(feature = "mock-oracle")]
+pub use set_mock_oracle::*;
 pub use submit_order::*;
 pub use withdraw::*;

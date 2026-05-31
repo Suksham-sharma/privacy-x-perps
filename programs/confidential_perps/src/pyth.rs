@@ -69,6 +69,19 @@ pub fn read_pyth_price(
 ) -> Result<u64> {
     // 1. Owner check — the trust anchor; without it anyone can forge a buffer
     //    with the right discriminator.
+    //
+    // DEMO/LOCALNET (feature = "mock-oracle"): also accept an account owned by
+    // THIS program — the `set_mock_oracle` PDA a localnet crank keeps fresh.
+    // A bare validator has no Pyth publisher network, so this is the only way
+    // to get a live, ticking price locally. The remaining checks (discriminator,
+    // Full verification, feed_id, freshness, conf) still run unchanged.
+    // MUST NOT ship: the `mock-oracle` feature is stripped for devnet/mainnet.
+    #[cfg(feature = "mock-oracle")]
+    require!(
+        *price_info.owner == PYTH_RECEIVER_PROGRAM_ID || *price_info.owner == crate::ID,
+        ErrorCode::InvalidPythAccount
+    );
+    #[cfg(not(feature = "mock-oracle"))]
     require_keys_eq!(
         *price_info.owner,
         PYTH_RECEIVER_PROGRAM_ID,

@@ -5,9 +5,9 @@
 export const USDC_DECIMALS = 6n;
 export const USDC = 1_000_000n;
 
-// Localnet index/mark price = the Pyth fixture (100,000 ticks). Phase 5 sources
-// this live; for now both the order ticket and PnL use it as the mark.
-export const INDEX_PRICE_TICKS = 100_000n;
+// NOTE: the index/mark price is now LIVE — read from the on-chain mock oracle
+// via useIndexPrice() (USD * 1e6 == USDC base units per SOL, 1 lot = 1 SOL).
+// The old hardcoded INDEX_PRICE_TICKS constant was removed.
 
 export function fmtUsdc(base: bigint | undefined): string {
   if (base === undefined) return "—";

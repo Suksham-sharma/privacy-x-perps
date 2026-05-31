@@ -14,7 +14,7 @@ name = "confidential_perps"
 # the cloned-from-devnet PriceUpdateV2 (publish_time frozen at clone-time).
 # Pre-mainnet TODO: strip `test-stale-ok` from `default` and verify the
 # 30s window holds against real-time Pyth pushes on devnet.
-default = ["test-stale-ok"]
+default = ["test-stale-ok", "mock-oracle"]
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
@@ -27,6 +27,13 @@ custom-panic = []
 # a cloned PriceUpdateV2 whose publish_time is frozen at clone-time. Off
 # in any prod build.
 test-stale-ok = []
+# DEMO/LOCALNET ONLY. Enables the `set_mock_oracle` instruction and lets
+# `read_pyth_price` accept a program-owned mock PriceUpdateV2 account, so a
+# localnet crank can push a live SOL/USD price (no Wormhole/publisher network
+# exists on a bare validator). In `default` because `arcium build` has no
+# `--features` flag. SECURITY: this relaxes the oracle owner check (the trust
+# boundary) — MUST be stripped from `default` before any devnet/mainnet build.
+mock-oracle = []
 
 [dependencies]
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }

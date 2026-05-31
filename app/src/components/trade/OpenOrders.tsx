@@ -14,8 +14,10 @@ import {
 } from "@confidential-perps/sdk";
 import { useProgram } from "@/lib/anchor";
 import { useBatchBuffer } from "@/hooks/useBatchBuffer";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 import { PROGRAM_ID } from "@/lib/config";
 import { fmtUsdc } from "@/lib/format";
+import { friendlyError } from "@/lib/errors";
 
 const MAX_ORDERS = 8;
 
@@ -38,13 +40,16 @@ function short(addr: string): string {
   return `${addr.slice(0, 4)}…${addr.slice(-2)}`;
 }
 
-export function OpenOrders() {
+// mineOnly → "Open Orders" tab: just the connected wallet's pending orders.
+// default → "Batch" tab: the full encrypted register (every slot, others sealed).
+export function OpenOrders({ mineOnly = false }: { mineOnly?: boolean } = {}) {
   const program = useProgram();
   const { publicKey } = useWallet();
   const batch = useBatchBuffer();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "ok" | "err" | "info"; msg: string } | null>(null);
+  useAutoDismiss(status, () => setStatus(null));
 
   const me = publicKey?.toBase58();
   const data = batch.data;
@@ -65,76 +70,69 @@ export function OpenOrders() {
       qc.invalidateQueries({ queryKey: ["batchBuffer"] });
       qc.invalidateQueries({ queryKey: ["userCollateral"] });
     } catch (e) {
-      setStatus({ tone: "err", msg: (e as Error).message });
+      setStatus({ tone: "err", msg: friendlyError(e) });
     } finally {
       setBusy(false);
     }
   }
 
-  if (!data || data.nOrders === 0) {
-    return (
-      <>
-        <div className="ebk-h">
-          <span>Slot</span>
-          <span>Trader</span>
-          <span>Sealed order</span>
-          <span>Margin</span>
-        </div>
-        <div className="pane-empty">No sealed orders in the batch — submit one to open the round.</div>
-        {status && (
-          <div className="pane-status">
-            <div className={`cstatus ${status.tone}`}>{status.msg}</div>
-          </div>
-        )}
-      </>
-    );
-  }
-
   const stash = readStash();
+  const rows = (data?.orders ?? [])
+    .map((o, slot) => ({ o, slot }))
+    .filter(({ o }) => !mineOnly || (!!me && o.owner === me));
+  const empty = !data || data.nOrders === 0 || (mineOnly && rows.length === 0);
 
   return (
     <>
       <div className="ebk-h">
         <span>Slot</span>
         <span>Trader</span>
-        <span>Sealed order</span>
+        <span>{mineOnly ? "Order" : "Sealed order"}</span>
         <span>Margin</span>
       </div>
 
-      {data.orders.map((o, i) => {
-        const mine = !!me && o.owner === me;
-        return (
-          <div key={`${o.owner}-${i}`} className={`ebk-row ${mine ? "you" : ""}`}>
-            <span className="slot">{String(i + 1).padStart(2, "0")}</span>
-            <span className="tr">{mine ? `you · ${short(o.owner)}` : short(o.owner)}</span>
-            <span className="ord">
-              {mine && stash?.side !== undefined ? (
-                <>
-                  <span className={stash.side === 0 ? "side-long" : "side-short"}>
-                    {stash.side === 0 ? "LONG" : "SHORT"}
-                  </span>{" "}
-                  {stash.size ? Number(stash.size).toLocaleString("en-US") : "—"}
-                  {stash.leverage ? ` · ${stash.leverage}×` : ""}
-                </>
-              ) : mine ? (
-                <span className="cipher">Sealed (yours)</span>
-              ) : (
-                <span className="redact">█████████</span>
-              )}
-            </span>
-            <span className="mg">
-              {fmtUsdc(o.maxMargin)}
-              {mine && (
-                <button className="ebk-cancel" onClick={cancel} disabled={busy || data.isProcessing}>
-                  {busy ? "…" : "Cancel"}
-                </button>
-              )}
-            </span>
-          </div>
-        );
-      })}
+      {empty ? (
+        <div className="pane-empty">
+          {mineOnly
+            ? "No open orders — submit one from the ticket."
+            : "No sealed orders in the batch — submit one to open the round."}
+        </div>
+      ) : (
+        rows.map(({ o, slot }) => {
+          const mine = !!me && o.owner === me;
+          return (
+            <div key={`${o.owner}-${slot}`} className={`ebk-row ${mine ? "you" : ""}`}>
+              <span className="slot">{String(slot + 1).padStart(2, "0")}</span>
+              <span className="tr">{mine ? `you · ${short(o.owner)}` : short(o.owner)}</span>
+              <span className="ord">
+                {mine && stash?.side !== undefined ? (
+                  <>
+                    <span className={stash.side === 0 ? "side-long" : "side-short"}>
+                      {stash.side === 0 ? "LONG" : "SHORT"}
+                    </span>{" "}
+                    {stash.size ? Number(stash.size).toLocaleString("en-US") : "—"}
+                    {stash.leverage ? ` · ${stash.leverage}×` : ""}
+                  </>
+                ) : mine ? (
+                  <span className="cipher">Sealed (yours)</span>
+                ) : (
+                  <span className="redact">█████████</span>
+                )}
+              </span>
+              <span className="mg">
+                {fmtUsdc(o.maxMargin)}
+                {mine && (
+                  <button className="ebk-cancel" onClick={cancel} disabled={busy || data?.isProcessing}>
+                    {busy ? "…" : "Cancel"}
+                  </button>
+                )}
+              </span>
+            </div>
+          );
+        })
+      )}
 
-      {data.nOrders < MAX_ORDERS && (
+      {!mineOnly && data && data.nOrders > 0 && data.nOrders < MAX_ORDERS && (
         <div className="ebk-empty">
           <span className="slot">{String(data.nOrders + 1).padStart(2, "0")}</span>
           <span>{data.isProcessing ? "— matching… —" : "— awaiting counterparty —"}</span>
@@ -143,11 +141,15 @@ export function OpenOrders() {
         </div>
       )}
 
-      <div className="pane-note">
-        <span className="microprint">
-          YOUR ORDER IS LEGIBLE TO YOU ALONE · EVERY OTHER SLOT STAYS SEALED UNTIL THE MPC MATCH · CANCEL REFUNDS MARGIN
-        </span>
-      </div>
+      {!empty && (
+        <div className="pane-note">
+          <span className="microprint">
+            {mineOnly
+              ? "YOUR PENDING ORDERS · LEGIBLE TO YOU ALONE · CANCEL REFUNDS MARGIN"
+              : "EVERY OTHER SLOT STAYS SEALED UNTIL THE MPC MATCH · YOUR ORDER IS LEGIBLE TO YOU ALONE · CANCEL REFUNDS MARGIN"}
+          </span>
+        </div>
+      )}
 
       {status && (
         <div className="pane-status">

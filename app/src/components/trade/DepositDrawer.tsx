@@ -13,8 +13,10 @@ import { deriveMarketPda, deriveUserCollateralPda } from "@confidential-perps/sd
 import { useProgram } from "@/lib/anchor";
 import { useUsdcBalance } from "@/hooks/useUsdcBalance";
 import { useUserCollateral } from "@/hooks/useUserCollateral";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 import { PROGRAM_ID, USDC_MINT } from "@/lib/config";
 import { fmtUsdc } from "@/lib/format";
+import { friendlyError } from "@/lib/errors";
 
 function toBaseUnits(input: string): bigint | null {
   const v = Number(input);
@@ -37,6 +39,7 @@ export function DepositDrawer({ open, onClose }: { open: boolean; onClose: () =>
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState<null | "faucet" | "deposit" | "withdraw">(null);
   const [status, setStatus] = useState<{ tone: Tone; msg: string } | null>(null);
+  useAutoDismiss(status, () => setStatus(null));
 
   const ready = connected && !!publicKey && !!program && !!USDC_MINT;
 
@@ -60,7 +63,7 @@ export function DepositDrawer({ open, onClose }: { open: boolean; onClose: () =>
       setStatus({ tone: "ok", msg: `Funded ${data.usdc} USDC + 2 SOL gas.` });
       setTimeout(refresh, 1200);
     } catch (e) {
-      setStatus({ tone: "err", msg: (e as Error).message });
+      setStatus({ tone: "err", msg: friendlyError(e) });
     } finally {
       setBusy(null);
     }
@@ -111,7 +114,7 @@ export function DepositDrawer({ open, onClose }: { open: boolean; onClose: () =>
       setAmount("");
       setTimeout(refresh, 800);
     } catch (e) {
-      setStatus({ tone: "err", msg: (e as Error).message });
+      setStatus({ tone: "err", msg: friendlyError(e) });
     } finally {
       setBusy(null);
     }

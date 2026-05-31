@@ -57,6 +57,7 @@ import {
   deriveBatchBufferPda,
   deriveUserCollateralPda,
   derivePositionPda,
+  deriveMockOraclePda,
   encryptOrder,
   toSubmitOrderArgs,
   type OrderPlaintext,
@@ -64,7 +65,14 @@ import {
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
+
+// The bootstrap creates the localnet USDC mint with this deterministic faucet
+// keypair as the mint authority. When the market already exists (bootstrap ran
+// for the app), fundUser must mint with THIS authority, not `admin`.
+const faucetAdmin = Keypair.fromSeed(
+  createHash("sha256").update("iceberg-localnet-faucet-v0").digest().subarray(0, 32),
+);
 import { ConfidentialPerps } from "../target/types/confidential_perps";
 
 const USDC_DECIMALS = 6;
@@ -116,12 +124,13 @@ async function fundUser(
     usdcMint,
     user.publicKey,
   );
+  // Mint authority is the faucet admin (set by the bootstrap), not `admin`.
   await mintTo(
     connection,
-    admin,
+    admin, // fee payer
     usdcMint,
     ata.address,
-    admin,
+    faucetAdmin, // mint authority
     Number(200n * ONE_USDC),
   );
   return ata.address;
@@ -172,7 +181,7 @@ async function main() {
     usdcMint = market.usdcMint;
     log(`init_market: SKIP (market exists; usdc=${usdcMint.toBase58().slice(0,8)}…)`);
   } else {
-    usdcMint = await createMint(connection, admin, admin.publicKey, null, USDC_DECIMALS);
+    usdcMint = await createMint(connection, admin, faucetAdmin.publicKey, null, USDC_DECIMALS);
     const vaultAta = await getAssociatedTokenAddress(usdcMint, marketPda, true);
     const feedId = Array.from(Buffer.from(SOL_USD_FEED_ID_HEX, "hex"));
     const sig = await program.methods
@@ -257,8 +266,17 @@ async function main() {
   log(`deposit 200 USDC × 2`);
 
   // ---- 6. submit orders ----
-  const aliceOrder: OrderPlaintext = { side: 0n, price: 100_000n, size: 1_000n, clientNonce: 1n };
-  const bobOrder: OrderPlaintext = { side: 1n, price: 100_000n, size: 1_000n, clientNonce: 2n };
+  // Price at the LIVE mock-oracle value (USD * 1e6) so both orders sit inside
+  // the circuit's ±5% band; 1 lot = 1 SOL.
+  const [oraclePda] = deriveMockOraclePda(program.programId);
+  const oracleAcc = await connection.getAccountInfo(oraclePda);
+  if (!oracleAcc) throw new Error("mock oracle not seeded — run localnet-bootstrap first");
+  const livePrice = BigInt(
+    oracleAcc.data.readBigInt64LE(oracleAcc.data[40] === 1 ? 73 : 74).toString(),
+  );
+  log(`live oracle price = $${(Number(livePrice) / 1e6).toFixed(2)} (${livePrice})`);
+  const aliceOrder: OrderPlaintext = { side: 0n, price: livePrice, size: 1n, clientNonce: 1n };
+  const bobOrder: OrderPlaintext = { side: 1n, price: livePrice, size: 1n, clientNonce: 2n };
   const aliceArgs = toSubmitOrderArgs(encryptOrder(aliceOrder, mxePublicKey));
   const bobArgs = toSubmitOrderArgs(encryptOrder(bobOrder, mxePublicKey));
 
@@ -284,7 +302,7 @@ async function main() {
       .signers([user])
       .rpc({ skipPreflight: true, commitment: "confirmed" });
   }
-  log(`submit_order × 2 (alice long, bob short, both @ 100k × 1000)`);
+  log(`submit_order × 2 (alice long, bob short, both @ live oracle × 1 SOL)`);
 
   // ---- 7. wait for batch window ----
   log(`wait 3s for batch window to close…`);
@@ -319,7 +337,7 @@ async function main() {
         clusterAccount: getClusterAccAddress(arciumEnv.arciumClusterOffset),
         market: marketPda,
         batchBuffer: batchBufferPda,
-        priceUpdate: PYTH_PRICE_UPDATE,
+        priceUpdate: oraclePda,
       })
       .signers([admin])
       .rpc({ skipPreflight: true, commitment: "confirmed" });
@@ -352,12 +370,12 @@ async function main() {
         market: marketPda,
         position: pos,
         userCollateral: uc,
-        priceUpdate: PYTH_PRICE_UPDATE,
+        priceUpdate: oraclePda,
       })
       .signers([user])
       .rpc({ skipPreflight: true, commitment: "confirmed" });
   }
-  log(`close × 2 at fixture price (PnL = 0)`);
+  log(`close × 2 at the live oracle price (realized PnL from price drift)`);
 
   // ---- 12. final balances ----
   const aliceFinal = await (program.account as any).userCollateral.fetch(aliceUc);

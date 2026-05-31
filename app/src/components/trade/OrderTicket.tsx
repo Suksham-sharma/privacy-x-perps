@@ -20,8 +20,11 @@ import {
 import { useProgram } from "@/lib/anchor";
 import { useMxePublicKey } from "@/hooks/useMxePublicKey";
 import { useUserCollateral } from "@/hooks/useUserCollateral";
+import { useIndexPrice } from "@/hooks/useIndexPrice";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 import { PROGRAM_ID } from "@/lib/config";
-import { fmtUsdc, INDEX_PRICE_TICKS } from "@/lib/format";
+import { fmtUsdc } from "@/lib/format";
+import { friendlyError } from "@/lib/errors";
 
 function randomU64(): bigint {
   const b = crypto.getRandomValues(new Uint8Array(8));
@@ -37,36 +40,41 @@ export function OrderTicket() {
   const { publicKey, connected } = useWallet();
   const mxe = useMxePublicKey();
   const collateral = useUserCollateral();
+  const index = useIndexPrice();
   const qc = useQueryClient();
 
   const [side, setSide] = useState<0 | 1>(0); // 0 long, 1 short
-  const [sizeInput, setSizeInput] = useState("1000");
+  const [sizeInput, setSizeInput] = useState("1");
   const [leverage, setLeverage] = useState(2);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: Tone; msg: string } | null>(null);
+  useAutoDismiss(status, () => setStatus(null));
 
+  // Live SOL/USD index (USD * 1e6 == USDC base units per SOL). 1 lot = 1 SOL,
+  // so notional = price * size is already in USDC base units.
+  const indexPrice = index.data ?? null;
   const size = (() => {
     const v = Number(sizeInput);
     return Number.isFinite(v) && v > 0 ? BigInt(Math.floor(v)) : 0n;
   })();
-  const notional = INDEX_PRICE_TICKS * size; // base units
+  const notional = (indexPrice ?? 0n) * size; // base units
   const maxMargin = size > 0n ? (notional + BigInt(leverage) - 1n) / BigInt(leverage) : 0n;
   const balance = collateral.data ?? 0n;
   const insufficient = maxMargin > balance;
 
   const ready =
-    connected && !!publicKey && !!program && !!mxe.data && size > 0n && !insufficient;
+    connected && !!publicKey && !!program && !!mxe.data && indexPrice !== null && size > 0n && !insufficient;
   const levPct = ((leverage - 1) / 9) * 100;
 
   async function submit() {
-    if (!program || !publicKey || !mxe.data) return;
+    if (!program || !publicKey || !mxe.data || indexPrice === null) return;
     setBusy(true);
     setStatus({ tone: "info", msg: "Encrypting order in your browser…" });
     try {
       const clientNonce = randomU64();
       const pt: OrderPlaintext = {
         side: BigInt(side),
-        price: INDEX_PRICE_TICKS,
+        price: indexPrice,
         size,
         clientNonce,
       };
@@ -121,7 +129,7 @@ export function OrderTicket() {
       qc.invalidateQueries({ queryKey: ["userCollateral"] });
       qc.invalidateQueries({ queryKey: ["position"] });
     } catch (e) {
-      setStatus({ tone: "err", msg: (e as Error).message });
+      setStatus({ tone: "err", msg: friendlyError(e) });
     } finally {
       setBusy(false);
     }
@@ -163,7 +171,7 @@ export function OrderTicket() {
             value={sizeInput}
             onChange={(e) => setSizeInput(e.target.value)}
           />
-          <span className="u">lots</span>
+          <span className="u">SOL</span>
         </div>
       </div>
 
@@ -186,16 +194,16 @@ export function OrderTicket() {
           />
         </div>
         <div className="lev-marks">
-          <span>1×</span>
-          <span>5×</span>
-          <span>10×</span>
+          <span style={{ left: "0%" }}>1×</span>
+          <span style={{ left: `${((5 - 1) / 9) * 100}%`, transform: "translateX(-50%)" }}>5×</span>
+          <span style={{ left: "100%", transform: "translateX(-100%)" }}>10×</span>
         </div>
       </div>
 
       <div className="ticket-sum">
         <div className="l">
-          <span className="k">Index</span>
-          <span>{INDEX_PRICE_TICKS.toLocaleString("en-US")}</span>
+          <span className="k">Index · SOL/USD</span>
+          <span>{indexPrice !== null ? `$${fmtUsdc(indexPrice)}` : "—"}</span>
         </div>
         <div className="l">
           <span className="k">Notional</span>

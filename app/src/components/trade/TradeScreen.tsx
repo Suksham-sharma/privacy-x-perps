@@ -21,7 +21,7 @@ import { usePosition } from "@/hooks/usePosition";
 import { useBatchBuffer } from "@/hooks/useBatchBuffer";
 import { fmtUsdc } from "@/lib/format";
 
-type Tab = "positions" | "orders" | "history";
+type Tab = "positions" | "orders" | "history" | "batch";
 
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -31,22 +31,30 @@ function ago(ts: number): string {
   return `${Math.floor(m / 60)}h ago`;
 }
 
-function HistoryPane({ fills }: { fills: Fill[] }) {
-  if (fills.length === 0) {
+// mineOnly → "History" tab: just the connected wallet's fills.
+// default → "Batch" tab: the full settlement log across all traders.
+function HistoryPane({ fills, mineOnly = false }: { fills: Fill[]; mineOnly?: boolean }) {
+  const rows = mineOnly ? fills.filter((f) => f.youFilled) : fills;
+  const note = mineOnly
+    ? "YOUR FILLS · SESSION-SCOPED — PERSISTENT HISTORY NEEDS AN INDEXER"
+    : "BATCH SETTLEMENT LOG · SESSION-SCOPED — NEEDS AN INDEXER OVER BatchSettledEvent";
+  if (rows.length === 0) {
     return (
       <>
-        <div className="pane-empty">No settled batches yet this session.</div>
+        <div className="pane-empty">
+          {mineOnly
+            ? "No fills yet — your matched trades will show here."
+            : "No settled batches yet this session."}
+        </div>
         <div className="pane-note">
-          <span className="microprint">
-            SETTLEMENT LOG · SESSION-SCOPED — PERSISTENT HISTORY NEEDS AN INDEXER OVER BatchSettledEvent
-          </span>
+          <span className="microprint">{note}</span>
         </div>
       </>
     );
   }
   return (
     <>
-      {fills.map((f, i) => (
+      {rows.map((f, i) => (
         <div className="hist-row" key={`${f.batchId}-${i}`}>
           <span className="ev">
             <span className={`tag ${f.youFilled ? "you" : "cleared"}`}>
@@ -54,15 +62,13 @@ function HistoryPane({ fills }: { fills: Fill[] }) {
             </span>
             Batch #{f.batchId.toString()}
           </span>
-          <span className="desc">Cleared @ {f.clearingPrice.toLocaleString("en-US")}</span>
+          <span className="desc">Cleared @ ${fmtUsdc(f.clearingPrice)}</span>
           <span className="desc">{f.youFilled ? "your order matched" : "—"}</span>
           <span className="when">{ago(f.ts)}</span>
         </div>
       ))}
       <div className="pane-note">
-        <span className="microprint">
-          SESSION-SCOPED LOG — PERSISTENT HISTORY NEEDS AN INDEXER OVER BatchSettledEvent
-        </span>
+        <span className="microprint">{note}</span>
       </div>
     </>
   );
@@ -81,6 +87,8 @@ export default function TradeScreen() {
   const me = publicKey?.toBase58();
   const posCount = position.data ? 1 : 0;
   const orderCount = me && batch.data ? batch.data.owners.filter((o) => o === me).length : 0;
+  const myFillCount = fills.filter((f) => f.youFilled).length;
+  const batchCount = batch.data?.nOrders ?? 0;
 
   return (
     <div className="tscreen">
@@ -146,13 +154,22 @@ export default function TradeScreen() {
             Open Orders {orderCount > 0 && <span className="badge">{orderCount}</span>}
           </button>
           <button className={`tab ${tab === "history" ? "on" : ""}`} onClick={() => setTab("history")}>
-            History {fills.length > 0 && <span className="badge">{fills.length}</span>}
+            History {myFillCount > 0 && <span className="badge">{myFillCount}</span>}
+          </button>
+          <button className={`tab ${tab === "batch" ? "on" : ""}`} onClick={() => setTab("batch")}>
+            Batch {batchCount > 0 && <span className="badge">{batchCount}</span>}
           </button>
         </div>
         <div className="tpane">
           {tab === "positions" && <PositionsPanel />}
-          {tab === "orders" && <OpenOrders />}
-          {tab === "history" && <HistoryPane fills={fills} />}
+          {tab === "orders" && <OpenOrders mineOnly />}
+          {tab === "history" && <HistoryPane fills={fills} mineOnly />}
+          {tab === "batch" && (
+            <>
+              <OpenOrders />
+              <HistoryPane fills={fills} />
+            </>
+          )}
         </div>
       </section>
 

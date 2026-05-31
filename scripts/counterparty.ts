@@ -23,6 +23,7 @@ import {
   deriveBatchBufferPda,
   deriveUserCollateralPda,
   derivePositionPda,
+  deriveMockOraclePda,
   encryptOrder,
   toSubmitOrderArgs,
   type OrderPlaintext,
@@ -59,10 +60,7 @@ async function mxeWithRetry(provider: anchor.AnchorProvider, programId: PublicKe
 async function main() {
   const sideArg = (process.argv[2] ?? "short").toLowerCase();
   const side = sideArg === "long" ? 0n : 1n;
-  const size = BigInt(process.argv[3] ?? "1000");
-  const notional = PRICE * size;
-  const maxMargin = (notional + LEVERAGE - 1n) / LEVERAGE;
-  const deposit = maxMargin + 10n * ONE_USDC; // a little headroom
+  const size = BigInt(process.argv[3] ?? "1"); // 1 lot = 1 SOL
 
   const connection = new Connection(RPC, "confirmed");
   const wallet = new anchor.Wallet(counterparty);
@@ -74,7 +72,18 @@ async function main() {
   const idl = JSON.parse(fs.readFileSync("target/idl/confidential_perps.json", "utf8"));
   const program = new Program<ConfidentialPerps>(idl, provider);
 
-  console.log(`counterparty ${counterparty.publicKey.toBase58().slice(0, 8)}… → ${sideArg} ${size}`);
+  // Price at the LIVE mock-oracle value so we cross the browser order in-band.
+  const [oraclePda] = deriveMockOraclePda(program.programId);
+  const oracleAcc = await connection.getAccountInfo(oraclePda);
+  if (!oracleAcc) throw new Error("mock oracle not seeded — run localnet-bootstrap first");
+  const price = BigInt(oracleAcc.data.readBigInt64LE(oracleAcc.data[40] === 1 ? 73 : 74).toString());
+  const notional = price * size;
+  const maxMargin = (notional + LEVERAGE - 1n) / LEVERAGE;
+  const deposit = maxMargin + 10n * ONE_USDC; // a little headroom
+
+  console.log(
+    `counterparty ${counterparty.publicKey.toBase58().slice(0, 8)}… → ${sideArg} ${size} SOL @ $${(Number(price) / 1e6).toFixed(2)}`,
+  );
 
   // Fund SOL.
   if ((await connection.getBalance(counterparty.publicKey)) < 1e9) {
@@ -113,7 +122,7 @@ async function main() {
   }
 
   // Encrypt + submit the opposing order.
-  const pt: OrderPlaintext = { side, price: PRICE, size, clientNonce: 7n };
+  const pt: OrderPlaintext = { side, price, size, clientNonce: 7n };
   const args = toSubmitOrderArgs(encryptOrder(pt, mxe));
   await program.methods
     .submitOrder(
