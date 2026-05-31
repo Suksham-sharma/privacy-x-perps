@@ -1,16 +1,9 @@
-// close_position — user-initiated exit. Reads the current Pyth price as the
-// exit price (the user does NOT supply one), then releases margin + realized
-// PnL back to UserCollateral and zeros the Position.
-//
-// No user-supplied exit_price (Codex review fix): with no exit counterparty, a
-// caller-chosen price inside a band is free optionality — a long picks the top,
-// a short the bottom, a liquidator the worst value for the victim. Settling at
-// the oracle removes that surface. liquidate_position.rs is the same pattern.
-//
-// PnL (v0, lot-ticks 1:1 with USDC base units — see Position in state/mod.rs):
-//   realized_pnl = base_amount_lots * oracle_price + quote_entry
-//   credit       = margin_locked + realized_pnl
-// If credit < 0 the position can't self-close — goes through liquidation.
+// close_position — user exit at the Pyth price (user does NOT supply one),
+// releasing margin + realized PnL to UserCollateral and zeroing the Position.
+// SAFETY (Codex fix): a caller-chosen exit price is free optionality (pick the
+// most favorable value), so we settle at the oracle — same as liquidate_position.
+// PnL (v0, lot-ticks 1:1 with USDC base units): realized_pnl = base*price +
+// quote_entry; credit = margin_locked + pnl. credit < 0 => can't self-close (liquidate).
 use crate::{
     constants::{MARKET_SEED, POSITION_SEED, USER_COLLATERAL_SEED},
     error::ErrorCode,

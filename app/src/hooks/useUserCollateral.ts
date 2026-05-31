@@ -1,7 +1,6 @@
 "use client";
-// Reads the connected wallet's UserCollateral.balance (deposited margin held by
-// the program), polling every 3s. Returns base units (USDC has 6 decimals);
-// 0n when the PDA doesn't exist yet (never deposited).
+// Reads the wallet's UserCollateral.balance (deposited margin), polling 3s.
+// Returns base units (USDC 6 decimals); 0n if the PDA doesn't exist yet.
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { deriveMarketPda, deriveUserCollateralPda } from "@confidential-perps/sdk";

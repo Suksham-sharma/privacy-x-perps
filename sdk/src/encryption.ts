@@ -1,10 +1,5 @@
-// Client-side encryption for orders + fill decryption.
-// Mirrors the canonical add_together test pattern: x25519 ECDH with the MXE,
-// then RescueCipher with the shared secret.
-//
-// Runs in both Node (scripts/keeper) and the browser (the /trade UI), so the
-// nonce uses the Web Crypto global (present in Node >=19 and every browser)
-// rather than Node's `crypto.randomBytes`, which would break the browser bundle.
+// Client-side order encryption + fill decryption: x25519 ECDH with the MXE, then RescueCipher.
+// Nonce uses the Web Crypto global (Node >=19 + browser) so the browser bundle doesn't break.
 import { x25519, RescueCipher, deserializeLE } from "@arcium-hq/client";
 import { BN } from "@anchor-lang/core";
 import type { OrderPlaintext, EncryptedOrder } from "./types";

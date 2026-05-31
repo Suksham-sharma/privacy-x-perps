@@ -1,9 +1,6 @@
 "use client";
-// Open Orders = the live encrypted batch register. Every slot's {owner, margin}
-// is public on-chain; the order itself (side/price/size) is sealed. YOUR row
-// renders in plaintext — recovered from the client-side stash written at submit
-// time, since only you hold it — while every other trader's order stays a
-// redaction bar until the MPC match. Cancel pulls your order + refunds margin.
+// Open Orders = the live encrypted batch register: {owner, margin} public, order sealed.
+// YOUR row renders plaintext from the client-side stash; others stay redacted until the MPC match.
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,24 +14,10 @@ import { useBatchBuffer } from "@/hooks/useBatchBuffer";
 import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 import { PROGRAM_ID } from "@/lib/config";
 import { fmtUsdc } from "@/lib/format";
+import { getStashedOrder } from "@/lib/orderStash";
 import { friendlyError } from "@/lib/errors";
 
 const MAX_ORDERS = 4;
-
-interface Stash {
-  side?: 0 | 1;
-  size?: string;
-  leverage?: number;
-}
-
-function readStash(): Stash | null {
-  try {
-    const raw = sessionStorage.getItem("iceberg.lastOrder");
-    return raw ? (JSON.parse(raw) as Stash) : null;
-  } catch {
-    return null;
-  }
-}
 
 function short(addr: string): string {
   return `${addr.slice(0, 4)}…${addr.slice(-2)}`;
@@ -76,7 +59,6 @@ export function OpenOrders({ mineOnly = false }: { mineOnly?: boolean } = {}) {
     }
   }
 
-  const stash = readStash();
   const rows = (data?.orders ?? [])
     .map((o, slot) => ({ o, slot }))
     .filter(({ o }) => !mineOnly || (!!me && o.owner === me));
@@ -100,6 +82,9 @@ export function OpenOrders({ mineOnly = false }: { mineOnly?: boolean } = {}) {
       ) : (
         rows.map(({ o, slot }) => {
           const mine = !!me && o.owner === me;
+          // Per-row lookup keyed by this slot's maxMargin, so each of your
+          // orders renders its own side/size/leverage (not the last one's).
+          const stash = mine ? getStashedOrder(o.maxMargin) : null;
           return (
             <div key={`${o.owner}-${slot}`} className={`ebk-row ${mine ? "you" : ""}`}>
               <span className="slot">{String(slot + 1).padStart(2, "0")}</span>

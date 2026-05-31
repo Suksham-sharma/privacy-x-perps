@@ -1,8 +1,6 @@
 "use client";
-// useProgram() — builds an Anchor Program bound to the connected wallet.
-// Mirrors lifecycle-driver.ts: AnchorProvider(connection, wallet) ->
-// new Program<ConfidentialPerps>(idl, provider). Program ID is read from
-// idl.address, so it stays in sync with the deployed program automatically.
+// useProgram() — builds an Anchor Program bound to the connected wallet. Program
+// ID comes from idl.address, so it stays in sync with the deployed program.
 import { useMemo } from "react";
 import { AnchorProvider, Program } from "@anchor-lang/core";
 import { useConnection, useAnchorWallet } from "@solana/wallet-adapter-react";

@@ -1,6 +1,5 @@
 "use client";
-// Reads the rolling BatchBuffer: how many orders are queued (n_orders/4), the
-// current batch id, and whether the keeper is mid-match (is_processing). Polls
+// Reads the rolling BatchBuffer (queued count, batch id, is_processing), polling
 // every 2.5s so the order ticket + batch chip reflect submissions promptly.
 import { useQuery } from "@tanstack/react-query";
 import { deriveMarketPda, deriveBatchBufferPda } from "@confidential-perps/sdk";

@@ -1,16 +1,9 @@
-// liquidate_position — third-party close when a position can't cover its
-// maintenance margin. Permissionless: anyone can call once the gate passes.
-// v0 has no liquidator bounty (bounty + insurance fund are v0.2).
-//
-// Exit price comes from Pyth, not the liquidator (Codex review fix): a
-// caller-supplied price inside a band is free optionality to pick the value
-// most punitive to the victim. The liquidator's only choice is whether/when to
-// call. Same pattern as close_position.rs.
-//
-// Liquidatable when credit < margin_locked / 2 (50% maintenance):
-//   credit = margin_locked + PnL
-//   PnL    = base_amount_lots * pyth_price + quote_entry
-// Any positive residual credit goes to the owner; v0 takes no fee.
+// liquidate_position — permissionless third-party close when a position can't
+// cover maintenance margin. No bounty/insurance fund in v0. SAFETY (Codex fix):
+// exit price is Pyth, not the liquidator (a caller price is free optionality to
+// punish the victim) — same as close_position. Liquidatable when credit <
+// margin_locked/2 (credit = margin + PnL; PnL = base*price + quote_entry);
+// positive residual goes to the owner, no fee.
 use crate::{
     constants::{MARKET_SEED, POSITION_SEED, USER_COLLATERAL_SEED},
     error::ErrorCode,
@@ -85,9 +78,8 @@ pub fn liquidate_position_handler(ctx: Context<LiquidatePosition>) -> Result<()>
         .checked_add(pnl)
         .ok_or(ErrorCode::MathOverflow)?;
 
-    // Maintenance margin gate: liquidatable when credit < margin / 2.
-    // (Covers bankrupt too — negative credit is strictly less than the
-    // positive threshold.)
+    // Maintenance gate: liquidatable when credit < margin/2 (also covers
+    // bankrupt — negative credit is below the positive threshold).
     let maintenance = (pos.margin_locked as i128) / 2;
     require!(credit_i128 < maintenance, ErrorCode::PositionNotLiquidatable);
 

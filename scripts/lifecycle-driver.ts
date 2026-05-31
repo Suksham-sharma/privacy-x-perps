@@ -1,26 +1,6 @@
-// SDK lifecycle driver — drives the full perp flow from outside ts-mocha.
-// Foundation for the Week 6 UI: every step here maps to a UI interaction.
-//
-// Flow:
-//   1.  connect + wait for MXE pubkey
-//   2.  init_market (idempotent)
-//   3.  init_match_batch_comp_def + circuit upload (idempotent)
-//   4.  create + fund alice (long) + bob (short)
-//   5.  alice.deposit(200 USDC), bob.deposit(200 USDC)
-//   6.  alice.submitOrder(long, 100k, 1000), bob.submitOrder(short, 100k, 1000)
-//   7.  wait for batch window to close
-//   8.  process_batch as admin (keeper)
-//   9.  await batchSettledEvent + assert fills
-//   10. alice.closePosition(), bob.closePosition() at the fixture price
-//   11. print final balances
-//
-// Localnet only — devnet needs orders priced at the real ~$200 mantissa
-// (~20e9); see the TODO at the bottom of the file.
-//
-// Prereq: `arcium localnet` running, then:  pnpm exec tsx scripts/lifecycle-driver.ts
-//
-// getArciumEnv() reads ARCIUM_CLUSTER_OFFSET from the env; localnet always uses
-// offset 0 (cluster_acc_0.json in artifacts/), defaulted here so users needn't set it.
+// SDK lifecycle driver — full perp flow (init → deposit → orders → crank → settle → close) outside ts-mocha.
+// Localnet only (devnet needs real ~$200-mantissa pricing; see TODO at bottom). Run: `arcium localnet`,
+// then `pnpm exec tsx scripts/lifecycle-driver.ts`. ARCIUM_CLUSTER_OFFSET defaults to 0 (localnet).
 process.env.ARCIUM_CLUSTER_OFFSET ??= "0";
 
 import * as anchor from "@anchor-lang/core";
@@ -67,9 +47,8 @@ import * as os from "os";
 import * as path from "path";
 import { randomBytes, createHash } from "crypto";
 
-// The bootstrap creates the localnet USDC mint with this deterministic faucet
-// keypair as the mint authority. When the market already exists (bootstrap ran
-// for the app), fundUser must mint with THIS authority, not `admin`.
+// Deterministic faucet keypair = the localnet USDC mint authority (set by bootstrap);
+// fundUser must mint with THIS authority, not `admin`.
 const faucetAdmin = Keypair.fromSeed(
   createHash("sha256").update("iceberg-localnet-faucet-v0").digest().subarray(0, 32),
 );
@@ -350,10 +329,8 @@ async function main() {
   }
 
   // ---- 9. await MPC callback ----
-  // KEEPER_DRIVES_CRANK mode doesn't know the computationOffset the
-  // keeper picked, so we wait on the batchSettledEvent listener
-  // (already armed above) — fires when our callback handler runs,
-  // regardless of who triggered the crank.
+  // Wait on the batchSettledEvent listener (armed above) — fires on our callback
+  // regardless of who cranked, so KEEPER_DRIVES_CRANK mode needn't know the offset.
   const settled = await settledPromise;
   // The WS event can land a beat before the callback's writes are queryable at
   // "confirmed" — let the read catch up before fetching positions.
@@ -400,11 +377,8 @@ async function main() {
   console.log("\nLifecycle complete. ✅");
 }
 
-// TODO devnet support: real SOL/USD on devnet is ~$200 mantissa at
-// exponent -8. Orders need to be priced at that scale (~20e9) instead
-// of 100_000 for the ±5% oracle band to admit them. Pull live price
-// from PYTH_PRICE_UPDATE before constructing orders. Also needs the
-// devnet USDC mint from scripts/.devnet-state.json.
+// TODO devnet support: price orders at the real ~$200 mantissa (~20e9, exp -8) pulled from
+// PYTH_PRICE_UPDATE, and use the devnet USDC mint from scripts/.devnet-state.json.
 
 main().catch((e) => {
   console.error(e);

@@ -1,13 +1,6 @@
-// Localnet bootstrap for the /trade UI. Run ONCE per `arcium localnet` session:
-//
-//   pnpm exec tsx scripts/localnet-bootstrap.ts
-//
-// Mirrors lifecycle-driver.ts's init path (market + USDC mint + match comp def +
-// circuit), then emits app/.env.local so the UI + faucet route are wired to this
-// localnet. Localnet state is ephemeral per `arcium localnet` run; re-run this
-// after restarting localnet. The faucet/mint-authority keypair is derived from a
-// constant so the USDC mint authority stays stable across re-runs and restarts
-// (localnet-only — it mints worthless test USDC, so it has zero security value).
+// Localnet bootstrap for /trade — run ONCE per `arcium localnet` (state is ephemeral, re-run after restart):
+// inits market+USDC+pool+oracle+circuit and emits app/.env.local. The constant faucet/mint-authority keypair
+// is localnet-only (worthless test USDC, zero security value). Run: pnpm exec tsx scripts/localnet-bootstrap.ts
 process.env.ARCIUM_CLUSTER_OFFSET ??= "0";
 
 import * as anchor from "@anchor-lang/core";
@@ -46,9 +39,8 @@ import { createHash } from "crypto";
 
 const RPC = process.env.NEXT_PUBLIC_RPC_URL ?? "http://127.0.0.1:8899";
 const USDC_DECIMALS = 6;
-// Protocol liquidity backstop (v0a): the pool absorbs each batch's net
-// imbalance. Funded generously vs demo order sizes (~1 SOL) so it never runs
-// dry — the skew cap is the production guard (see constants.rs MAX_POOL_BASE).
+// Protocol liquidity backstop (v0a): pool absorbs each batch's net imbalance. Funded
+// generously vs demo sizes so it never runs dry; production guard is the skew cap (constants.rs MAX_POOL_BASE).
 const POOL_FUNDING_USDC = 100_000;
 // SOL/USD Pyth feed id — same one pinned at init in lifecycle-driver / constants.
 const SOL_USD_FEED_ID_HEX =
@@ -249,9 +241,8 @@ async function main() {
   }
 
   // ---- mock oracle (DEMO/LOCALNET) ----
-  // Seed the program-owned mock PriceUpdateV2 with a live SOL/USD price so the
-  // engine + UI read a realistic mark immediately. The keeper's pusher keeps it
-  // ticking afterward. Requires the program built with feature = "mock-oracle".
+  // Seed the program-owned mock PriceUpdateV2 with live SOL/USD (keeper's pusher keeps it
+  // ticking). Requires the program built with feature = "mock-oracle".
   const [mockOraclePda] = deriveMockOraclePda(program.programId);
   const seedPrice = await fetchSolPriceUnits();
   await program.methods

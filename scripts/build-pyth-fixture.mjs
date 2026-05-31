@@ -1,19 +1,6 @@
-// Build a synthetic Pyth PriceUpdateV2 JSON fixture for localnet tests.
-//
-// Why synthetic, not cloned-from-devnet:
-//   1. Real SOL/USD is ~$200 (mantissa ~20e9 at exp -8), but v0 tests order at
-//      price 100_000 — a real Pyth read's ±5% oracle band rejects every order.
-//   2. A cloned account's publish_time is frozen, so it goes stale during long
-//      runs even with the test-stale-ok 600s window.
-// The fixture sidesteps both: price = 100_000 (matches test orders) and
-// publish_time = i64::MAX (never stale via saturating_sub in pyth.rs).
-//
-// Layout mirrors pyth_solana_receiver_sdk::PriceUpdateV2 exactly: the
-// receiver-program owner passes the owner check; the discriminator + Full
-// verification + feed_id pass the rest of read_pyth_price's gates.
-//
-// Run from repo root:  node scripts/build-pyth-fixture.mjs
-// Output:              tests/fixtures/pyth_sol_usd.json
+// Build a synthetic Pyth PriceUpdateV2 fixture for localnet (synthetic, not cloned: price=100_000 matches
+// test orders' ±5% band, and publish_time=i64::MAX never goes stale). Layout mirrors PriceUpdateV2 exactly
+// to pass read_pyth_price's gates. Run from repo root: node scripts/build-pyth-fixture.mjs → tests/fixtures/pyth_sol_usd.json
 
 import { writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";

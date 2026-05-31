@@ -1,8 +1,5 @@
-// Browser polyfills for the Solana/Anchor/Arcium stack. web3.js v1 + Anchor
-// reference the Node `Buffer` global at runtime; the Arcium client reads
-// `process.env.ARCIUM_CLUSTER_OFFSET`. We install both client-side only — on
-// the server (SSR) these globals exist natively. Imported once, first thing in
-// the provider tree.
+// Browser polyfills (client-side only) for the Solana/Anchor/Arcium stack:
+// the Node `Buffer` global and `process.env.ARCIUM_CLUSTER_OFFSET`.
 import { Buffer } from "buffer";
 import { ARCIUM_CLUSTER_OFFSET } from "./config";
 

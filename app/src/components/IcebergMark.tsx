@@ -1,5 +1,4 @@
-// Iceberg brand mark — two paths (submerged mass + faceted tip), recolored via `currentColor`.
-// Generated from design/ref-iceberg-gemini.svg — regenerate, don't hand-edit the path data.
+// Iceberg brand mark (mass + faceted tip via currentColor). Generated — regenerate, don't hand-edit the paths.
 
 type Props = { size?: number; className?: string; title?: string };
 

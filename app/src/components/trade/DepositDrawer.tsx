@@ -1,8 +1,6 @@
 "use client";
-// Collateral drawer (on-demand): wallet USDC + deposited margin, a localnet
-// faucet, and deposit/withdraw — all wired to the program. Opens from the term
-// bar's Deposit button. Logic is unchanged from the old always-on panel; only
-// the surface moved into a slide-in drawer so trading holds the main canvas.
+// On-demand collateral drawer: wallet USDC + deposited margin, a localnet faucet,
+// and deposit/withdraw wired to the program. Opens from the term bar's Deposit button.
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";

@@ -1,11 +1,7 @@
-// process_batch — closes the open batch window and queues match_batch (v0a) in
-// Arcium. Permissionless: anyone can trigger once the gates pass (>= 1 order,
-// window closed, not already in flight); pays Arcium fees via `payer`.
-//
-// v0a matches 1..MAX_ORDERS orders against each other AND a liquidity pool
-// backstop, so a lone order no longer bricks the buffer — it fills against the
-// pool. The circuit has fixed arity MAX_ORDERS; empty slots are padded (with a
-// copy of orders[0]) and masked out by the public `n_active` count.
+// process_batch — closes the batch window and queues match_batch (v0a) in Arcium.
+// Permissionless once gates pass (>=1 order, window closed, not in flight); payer
+// pays Arcium fees. Matches 1..MAX_ORDERS orders + a pool backstop (lone order
+// fills the pool, no brick); empty slots pad with orders[0], masked by n_active.
 use crate::{
     constants::{
         BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, MAX_ORDERS, POOL_SEED,
@@ -117,13 +113,10 @@ pub fn process_batch_handler(
     // Required by the queue_computation_accounts macro pattern.
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
-    // Build the circuit args: MAX_ORDERS Enc<Shared, Order> envelopes, then the
-    // public n_active count, then the public oracle price. Each Enc is one
-    // x25519 pubkey + one nonce + the field ciphertexts in struct order
-    // (side u8, price u64, size u64, client_nonce u64 — matches encrypted-ixs
-    // Order). Slots >= n_orders are padded with a copy of orders[0]; the circuit
-    // masks them via n_active so the duplicate never affects the result (and we
-    // avoid feeding an all-zero, invalid x25519 pubkey into decryption).
+    // Circuit args: MAX_ORDERS Enc<Shared,Order> envelopes (x25519 pubkey + nonce
+    // + ct fields in struct order: side/price/size/client_nonce), then public
+    // n_active + oracle_price. Slots >= n_orders pad with orders[0] (masked by
+    // n_active) — avoids feeding an all-zero invalid x25519 pubkey to decryption.
     let mut args = ArgBuilder::new();
     for i in 0..MAX_ORDERS {
         let o = if i < n { buf.orders[i] } else { buf.orders[0] };
@@ -140,13 +133,10 @@ pub fn process_batch_handler(
         .plaintext_u64(oracle_price)
         .build();
 
-    // Derive the callback's extra accounts in the order MatchBatchCallback
-    // declares them:
-    //   [market, batch_buffer, pool, position_0..3, user_collateral_0..3]
-    // The pool + per-slot position/collateral PDAs derive against
-    // batch_buffer.orders[i].owner, so the callback must NOT reset the buffer
-    // before reading them — it resets after fills land. Slots >= n_orders are
-    // filled with the market key (the callback ignores them).
+    // Callback extra accounts in MatchBatchCallback's declared order:
+    // [market, batch_buffer, pool, position_0..3, user_collateral_0..3]. PDAs
+    // derive against orders[i].owner (callback must reset the buffer only after
+    // fills land); slots >= n_orders are market-key padding the callback ignores.
     let market_key = market.key();
     let (pool_key, _) =
         Pubkey::find_program_address(&[POOL_SEED, market_key.as_ref()], &crate::ID);

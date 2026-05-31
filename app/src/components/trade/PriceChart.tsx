@@ -1,12 +1,6 @@
 "use client";
-// Candlestick chart for the terminal, rendered with lightweight-charts.
-//
-// Data is REAL SOL/USD spot (Binance klines) — a market reference, not faked.
-// The protocol's on-chain mark on localnet is a fixed Pyth fixture (100,000
-// ticks), so the chart's USD scale and the on-chain index live in different
-// units for now; the in-chart note states this, and entry/liq overlays are
-// intentionally omitted until the live-price localnet fixture aligns the units
-// (the `entry`/`liq` props + createPriceLine path below are ready for that).
+// Candlestick chart (lightweight-charts) showing REAL SOL/USD spot (Binance klines), not faked.
+// Localnet's on-chain mark is a separate Pyth fixture, so units differ; entry/liq overlays stay off until aligned.
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,

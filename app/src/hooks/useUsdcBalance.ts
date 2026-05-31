@@ -1,7 +1,6 @@
 "use client";
-// Reads the connected wallet's USDC token-account balance (the spendable USDC in
-// the user's own wallet, distinct from deposited collateral), polling every 3s.
-// Returns base units; 0n when the ATA doesn't exist yet.
+// Reads the wallet's spendable USDC token-account balance (distinct from
+// deposited collateral), polling 3s. Returns base units; 0n if no ATA yet.
 import { useQuery } from "@tanstack/react-query";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { getAssociatedTokenAddress } from "@solana/spl-token";

@@ -1,23 +1,7 @@
-// Liquidation + batch cranker keeper.
-//
-// Two jobs run on a poll loop:
-//   1. Batch cranker — when BatchBuffer has >= 1 order + window closed +
-//      !is_processing, call (permissionless) process_batch as `payer` (v0a:
-//      orders match peer-to-peer + against a pool backstop, so a lone order
-//      fills against the pool rather than bricking the buffer).
-//   2. Liquidator — for each open Position, read the Pyth price, compute
-//      credit = margin + base*price + quote, and call liquidate_position when
-//      credit < margin/2 (50% maintenance).
-//
-// Run (workspace root):  pnpm --filter @confidential-perps/keeper start
-//
-// Env:
-//   SOLANA_RPC_URL          (default http://localhost:8899)
-//   ANCHOR_WALLET           (default ~/.config/solana/id.json)
-//   ARCIUM_CLUSTER_OFFSET   (default 0 — localnet; 456 for devnet)
-//   PYTH_PRICE_UPDATE       (default 7UVimff… — SOL/USD sponsored feed)
-//   KEEPER_INTERVAL_MS      (default 3000)
-//   KEEPER_ONCE             (truthy → run one cycle and exit; for tests/cron)
+// Liquidation + batch cranker keeper (poll loop): cranks permissionless process_batch on a
+// closed non-empty batch (v0a pool backstop — lone orders fill the pool, no brick), and
+// liquidates positions where credit < margin/2. Env: SOLANA_RPC_URL, ANCHOR_WALLET,
+// ARCIUM_CLUSTER_OFFSET (0 localnet / 456 devnet), PYTH_PRICE_UPDATE, KEEPER_INTERVAL_MS, KEEPER_ONCE.
 
 import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import * as anchor from "@anchor-lang/core";
@@ -68,12 +52,8 @@ function log(msg: string, data?: Record<string, unknown>) {
   console.log(`[${ts()}] ${msg}${tail}`);
 }
 
-// PriceUpdateV2 layout — mirrors programs/confidential_perps/src/pyth.rs.
-// Offsets after the 8-byte Anchor discriminator:
-//   write_authority: 32  (bytes 8..40)
-//   verification_lvl:  1  (byte 40 — 0=Partial+u8, 1=Full)
-//   feed_id:          32  (bytes 41..73 — when Full)
-//   price:             8  (bytes 73..81 — i64 LE)
+// PriceUpdateV2 layout (mirrors src/pyth.rs): after 8-byte discriminator, write_authority(32),
+// verification_lvl(1, byte 40: 0=Partial+u8/1=Full), feed_id(32), price(i64 LE at 73 Full / 74 Partial).
 function readPythPrice(data: Buffer): bigint {
   if (data.length < 81) throw new Error(`pyth account too short: ${data.length}`);
   const verLevel = data[8 + 32];

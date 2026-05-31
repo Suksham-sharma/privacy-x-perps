@@ -1,13 +1,8 @@
-// DEMO/LOCALNET ONLY (feature = "mock-oracle").
-//
-// A bare validator has no Pyth publisher/Wormhole network, so the cloned
-// PriceUpdateV2 account never updates. This instruction lets a localnet crank
-// write a fresh SOL/USD price into a PROGRAM-OWNED account that mimics the Pyth
-// PriceUpdateV2 layout byte-for-byte. Paired with the feature-gated owner-check
-// relaxation in pyth.rs, the rest of read_pyth_price (discriminator, Full
-// verification, feed_id, freshness, conf) validates it exactly like a real Pyth
-// account — so the engine reads a live, ticking price with no other changes.
-//
+// DEMO/LOCALNET ONLY (feature = "mock-oracle"). A bare validator has no Pyth
+// publisher network, so a localnet crank writes a fresh SOL/USD price into a
+// PROGRAM-OWNED account mimicking the PriceUpdateV2 layout byte-for-byte; paired
+// with the feature-gated owner-check relaxation in pyth.rs, all other
+// read_pyth_price checks still validate it like a real account.
 // SECURITY: stripped from `default` features before any devnet/mainnet build.
 use crate::constants::{MOCK_ORACLE_SEED, SOL_USD_FEED_ID};
 use crate::error::ErrorCode;
@@ -17,10 +12,8 @@ use anchor_lang::system_program;
 // Same 8-byte discriminator read_pyth_price checks (sha256("account:PriceUpdateV2")).
 const PRICE_UPDATE_V2_DISCRIMINATOR: [u8; 8] = [34, 241, 35, 99, 157, 126, 244, 205];
 
-// PriceUpdateV2 (Full variant) byte length — mirrors scripts/build-pyth-fixture.mjs:
-// 8 disc + 32 write_authority + 1 verification + 32 feed_id + 8 price + 8 conf
-// + 4 exponent + 8 publish_time + 8 prev_publish_time + 8 ema_price + 8 ema_conf
-// + 8 posted_slot.
+// PriceUpdateV2 (Full) byte length — mirrors scripts/build-pyth-fixture.mjs
+// (8 disc + 32 auth + 1 verif + 32 feed_id + price/conf/exp/times/ema + 8 slot).
 const MOCK_ORACLE_SPACE: usize = 133;
 
 #[derive(Accounts)]
@@ -28,14 +21,10 @@ pub struct SetMockOracle<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    /// CHECK: SAFETY — intentionally untyped. This account holds a raw Pyth
-    /// PriceUpdateV2 byte layout (with Pyth's own 8-byte discriminator); a typed
-    /// `Account<T>` would impose Anchor's discriminator and reject it. Invariants
-    /// are enforced without the type: the address is pinned by the PDA
-    /// `seeds = [MOCK_ORACLE_SEED]` + canonical `bump` (only this program can
-    /// create/own it), and every consumer re-validates the bytes through
-    /// `read_pyth_price` (discriminator, Full verification, feed_id, freshness,
-    /// conf) before trusting the price. Created on first call, overwritten after.
+    /// CHECK: SAFETY — intentionally untyped (holds raw Pyth PriceUpdateV2 bytes;
+    /// a typed Account<T> would impose Anchor's discriminator and reject it).
+    /// Address pinned by PDA seeds=[MOCK_ORACLE_SEED]+bump (only this program owns
+    /// it) and every consumer re-validates via read_pyth_price before trusting it.
     #[account(mut, seeds = [MOCK_ORACLE_SEED], bump)]
     pub mock_oracle: UncheckedAccount<'info>,
 
@@ -68,9 +57,8 @@ pub fn set_mock_oracle_handler(ctx: Context<SetMockOracle>, price: i64) -> Resul
         )?;
     }
 
-    // Write the PriceUpdateV2 (Full) layout in the exact Borsh field order
-    // read_pyth_price expects. publish_time = now so the freshness check passes
-    // even on the strict 30s window.
+    // Write PriceUpdateV2 (Full) in the exact Borsh field order read_pyth_price
+    // expects; publish_time = now so freshness passes even the strict 30s window.
     let mut data = oracle_ai.try_borrow_mut_data()?;
     require!(data.len() >= MOCK_ORACLE_SPACE, ErrorCode::InvalidPythAccount);
 

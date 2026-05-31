@@ -1,13 +1,5 @@
-// v0a pool-backstop e2e — scenarios the 2-order lifecycle-driver doesn't cover:
-//   B. a LONE order fills against the pool (the old brick is gone)
-//   C. an imbalanced batch (2 long + 1 short) → 3 peer fills + pool takes net 1
-//
-// Keeper-driven: submit orders, wait for BatchSettledEvent (the keeper cranks
-// process_batch once the window closes), then assert positions + pool deltas.
-// Requires: `arcium localnet` + `scripts/localnet-bootstrap.ts` (market + pool +
-// oracle) + the keeper running.
-//
-//   pnpm exec tsx scripts/test-v0a.ts
+// v0a pool-backstop e2e (keeper-driven): scenario B (lone order fills the pool, no brick) + C (2 long+1 short
+// → 3 fills, pool takes net 1). Requires `arcium localnet` + localnet-bootstrap + keeper. Run: pnpm exec tsx scripts/test-v0a.ts
 process.env.ARCIUM_CLUSTER_OFFSET ??= "0";
 
 import * as anchor from "@anchor-lang/core";
@@ -130,9 +122,8 @@ async function main() {
 
   let nonceCtr = 1n;
   async function submit(u: Keypair, side: bigint, size: bigint) {
-    // Price the long ABOVE / short BELOW the oracle so it reliably crosses even
-    // as the keeper pushes a fresh oracle during the window (clearing is always
-    // the crank-time oracle, so this only affects the cross gate, not PnL).
+    // Long ABOVE / short BELOW oracle so it crosses despite the keeper pushing fresh prices;
+    // clearing is always the crank-time oracle, so this affects the cross gate only, not PnL.
     const orderPrice = side === 0n ? price + price / 50n : price - price / 50n;
     const margin = orderPrice * size; // ~1x margin (full notional) — liquidation-safe
     const [uc] = deriveUserCollateralPda(market, u.publicKey, program.programId);

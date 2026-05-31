@@ -1,11 +1,6 @@
-// Counterparty order submitter — drives the OTHER side of a match so the browser
-// wallet's order can fill. A single browser has one burner; this script plays the
-// opposite side from a deterministic localnet keypair. Run after the UI submits
-// an order, then start the keeper to crank.
-//
-//   pnpm exec tsx scripts/counterparty.ts [short|long] [size]
-//
-// Defaults: short 1000 @ the localnet index (100,000), 2x leverage (50 USDC margin).
+// Counterparty submitter — plays the opposite side of the browser order from a deterministic localnet
+// keypair so it can fill. Run after the UI submits, then start the keeper to crank.
+//   pnpm exec tsx scripts/counterparty.ts [short|long] [size]   (default: short 1 @ live index, 2x leverage)
 process.env.ARCIUM_CLUSTER_OFFSET ??= "0";
 
 import * as anchor from "@anchor-lang/core";
@@ -85,7 +80,6 @@ async function main() {
     `counterparty ${counterparty.publicKey.toBase58().slice(0, 8)}… → ${sideArg} ${size} SOL @ $${(Number(price) / 1e6).toFixed(2)}`,
   );
 
-  // Fund SOL.
   if ((await connection.getBalance(counterparty.publicKey)) < 1e9) {
     const sig = await connection.requestAirdrop(counterparty.publicKey, 2e9);
     await connection.confirmTransaction(sig, "confirmed");

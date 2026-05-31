@@ -1,10 +1,6 @@
 "use client";
-// Client provider stack for the /trade screen:
-//   ConnectionProvider -> WalletProvider -> WalletModalProvider -> QueryClient.
-// Scoped to the /trade segment (via trade/layout.tsx) so the marketing pages
-// never load the Solana/wallet bundle. UnsafeBurnerWalletAdapter is the
-// localnet wallet (faucet funds it); Phantom/Solflare auto-register as Wallet
-// Standard wallets for the devnet flip — no explicit adapter import needed.
+// Client provider stack scoped to /trade so marketing pages skip the Solana bundle.
+// LocalBurnerWalletAdapter is the localnet wallet (persistent burner, faucet-funded).
 import "@/lib/polyfills";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
@@ -14,12 +10,12 @@ import {
   WalletProvider,
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { UnsafeBurnerWalletAdapter } from "@solana/wallet-adapter-unsafe-burner";
+import { LocalBurnerWalletAdapter } from "@/lib/localBurnerWallet";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RPC_URL } from "@/lib/config";
 
 export function Providers({ children }: { children: ReactNode }) {
-  const wallets = useMemo(() => [new UnsafeBurnerWalletAdapter()], []);
+  const wallets = useMemo(() => [new LocalBurnerWalletAdapter()], []);
   const [queryClient] = useState(() => new QueryClient());
 
   return (

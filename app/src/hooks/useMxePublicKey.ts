@@ -1,7 +1,6 @@
 "use client";
-// Fetches the MXE x25519 public key (needed to encrypt orders client-side).
-// Mirrors lifecycle-driver's retry: the key is stable once the MXE is up, so we
-// cache it forever and retry while localnet is still coming online.
+// Fetches the MXE x25519 public key (to encrypt orders client-side); cached
+// forever once the MXE is up, retried while localnet is still coming online.
 import { useQuery } from "@tanstack/react-query";
 import { AnchorProvider } from "@anchor-lang/core";
 import { getMXEPublicKey } from "@arcium-hq/client";

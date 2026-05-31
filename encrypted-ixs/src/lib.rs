@@ -1,8 +1,7 @@
 use arcis::*;
 
-// add_together — a toolchain canary. tests/confidential_perps.ts drives it
-// end-to-end to prove the MXE keygen + queue + callback pipeline works in
-// isolation, independent of our matching logic.
+// add_together — toolchain canary: tests drive it end-to-end to prove the MXE
+// keygen+queue+callback pipeline works, independent of matching logic.
 
 #[encrypted]
 mod toolchain_canary {
@@ -23,44 +22,29 @@ mod toolchain_canary {
 
 // match_batch (v0a) — N-order, oracle-pegged, pool-backstopped batch auction.
 //
-// Privacy model (the moat): ORDERS are encrypted during matching. MPC sees an
-// order's side/price/size in plaintext ONLY inside the circuit; no individual
-// node sees them, so nothing leaks pre-trade (no front-running / copy-trading).
-// FILLS are revealed (.reveal()) and the callback applies them — like a dark
-// pool printing to the tape post-trade. (v0 Positions are public on-chain, so a
-// revealed fill is no worse than the resulting state delta; encrypted positions
-// are v0.2.)
+// Privacy model (the moat): orders are encrypted; MPC sees side/price/size ONLY
+// inside the circuit (no node sees them => no pre-trade leak / front-running).
+// FILLS are .reveal()'d post-trade like a dark pool printing to the tape (v0
+// positions are already public on-chain; encrypted positions are v0.2).
 //
-// Matching rule — every order that crosses the oracle fills its FULL size:
-//   long  fills iff price >= oracle   (willing to buy at/above oracle)
-//   short fills iff price <= oracle   (willing to sell at/below oracle)
-// Peers net against each other; a protocol liquidity pool (computed by the
-// callback from total_long_base - total_short_base) absorbs only the leftover
-// imbalance at the oracle price. When the two sides match exactly the pool is
-// untouched — it behaves like a pure peer-to-peer auction and only steps in for
-// the residual. Because every crossing order fills fully, nobody is rationed =>
-// NO pro-rata => NO MPC division (the costly primitive) and NO partial-fill
-// carry-over. An order that doesn't cross fills 0 and the callback refunds its
-// margin; nothing ever bricks or gets stuck.
+// Matching rule — every order crossing the oracle fills its FULL size:
+//   long  fills iff price >= oracle ;  short fills iff price <= oracle
+// Peers net; the pool absorbs only the residual (total_long-total_short) at the
+// oracle price (untouched when balanced). Full fills => no pro-rata => no MPC
+// division and no carry-over; a non-crossing order fills 0 and is refunded —
+// nothing ever bricks.
 //
-// n_active (PUBLIC — the on-chain n_orders is already public) marks how many of
-// the N fixed slots hold a real order. Inactive slots are masked to a zero fill,
-// so process_batch can pad empty slots with any valid ciphertext envelope.
-//
-// Output (all PUBLIC, revealed):
-//   clearing_price    — = oracle (the pool guarantees execution at the oracle).
-//   total_long_base   — Σ filled long lots  } the callback derives the pool's
-//   total_short_base  — Σ filled short lots  } net position from these two.
-//   f{i}_size/f{i}_side — per-slot fill (lots, 0/1 side); applied to the
-//                         position owned by orders[i].owner.
+// n_active (PUBLIC, = on-chain n_orders): how many of the N fixed slots are real;
+// inactive slots mask to a zero fill, so process_batch can pad with any envelope.
+// Output (all PUBLIC, revealed): clearing_price (=oracle), total_long/short_base
+// (callback derives pool net), f{i}_size/f{i}_side per-slot fill for orders[i].owner.
 
 #[encrypted]
 mod circuits {
     use arcis::*;
 
-    // Fixed batch arity. Keep in sync with constants::MAX_ORDERS on the Anchor
-    // side (the buffer holds MAX_ORDERS slots; process_batch feeds all N here).
-    // N = 4: ~half the ACU of N=8, still a real multi-party batch.
+    // Fixed batch arity N=4. Keep in sync with constants::MAX_ORDERS (the buffer
+    // holds N slots; process_batch feeds all N). ~half the ACU of N=8.
 
     #[derive(Copy, Clone)]
     pub struct Order {

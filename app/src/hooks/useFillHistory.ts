@@ -1,13 +1,10 @@
 "use client";
-// Session-scoped settlement log. Subscribes to BatchSettledEvent: on each
-// keeper-cranked MPC match we (1) invalidate position/collateral/batch queries so
-// the UI refreshes instantly, and (2) prepend the fill to an in-memory list that
-// feeds the History tab + the fill banner. The WS subscription is best-effort —
-// the polling in the data hooks is the safety net if an event is missed.
-//
-// HONEST SCOPE: this list lives in memory and empties on reload. A *persistent*
-// history needs an indexer scanning BatchSettledEvent (or the wallet's tx log) —
-// tracked as a follow-up; the History tab states this in-place.
+// Session-scoped settlement log: on each MPC match, invalidate position/
+// collateral/batch queries and prepend the fill to an in-memory list.
+// Anchor's EventParser is flaky on Arcium's multi-ix callback txs (stack pop
+// underflow drops all events), so decode "Program data:" lines directly by
+// discriminator instead; polling in the data hooks is the safety net.
+// HONEST SCOPE: in-memory, empties on reload — persistence needs an indexer.
 import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +17,8 @@ export interface Fill {
   ts: number; // epoch ms, for "x ago" labels
 }
 
+const PROGRAM_DATA = "Program data: ";
+
 export function useFillHistory(): Fill[] {
   const program = useProgram();
   const { publicKey } = useWallet();
@@ -28,33 +27,68 @@ export function useFillHistory(): Fill[] {
 
   useEffect(() => {
     if (!program) return;
-    let id: number | undefined;
+    const conn = program.provider.connection;
+    let subId: number | undefined;
     try {
-      id = program.addEventListener("batchSettledEvent", (e: any) => {
-        qc.invalidateQueries({ queryKey: ["position"] });
-        qc.invalidateQueries({ queryKey: ["userCollateral"] });
-        qc.invalidateQueries({ queryKey: ["batchBuffer"] });
-        const you =
-          !!publicKey &&
-          Array.isArray(e.filledOwners) &&
-          e.filledOwners.some((o: any) => o?.equals?.(publicKey));
-        const fill: Fill = {
-          batchId: BigInt(e.batchId.toString()),
-          clearingPrice: BigInt(e.clearingPrice.toString()),
-          youFilled: !!you,
-          ts: Date.now(),
-        };
-        setFills((prev) => {
-          // de-dupe if the same batch settles twice via WS + replay
-          if (prev[0] && prev[0].batchId === fill.batchId) return prev;
-          return [fill, ...prev].slice(0, 50);
-        });
-      });
+      subId = conn.onLogs(
+        program.programId,
+        (logs) => {
+          if (logs.err) return;
+          for (const line of logs.logs) {
+            if (!line.startsWith(PROGRAM_DATA)) continue;
+            // Decode by discriminator: returns null for any non-matching
+            // "Program data:" line (e.g. Arcium's own events), so this only
+            // fires on our BatchSettledEvent.
+            let decoded: { name: string; data: Record<string, unknown> } | null = null;
+            try {
+              decoded = program.coder.events.decode(line.slice(PROGRAM_DATA.length));
+            } catch {
+              continue;
+            }
+            // Accept BOTH name/field casings: program.coder camelCases the IDL
+            // while a raw BorshCoder yields PascalCase + snake_case — coalesce
+            // so a casing change can't silently stop capturing fills again.
+            if (!decoded) continue;
+            if (decoded.name !== "batchSettledEvent" && decoded.name !== "BatchSettledEvent") continue;
+            const d = decoded.data as {
+              batchId?: { toString(): string };
+              batch_id?: { toString(): string };
+              clearingPrice?: { toString(): string };
+              clearing_price?: { toString(): string };
+              filledOwners?: { equals?: (k: unknown) => boolean }[];
+              filled_owners?: { equals?: (k: unknown) => boolean }[];
+            };
+            const batchId = d.batchId ?? d.batch_id;
+            const clearingPrice = d.clearingPrice ?? d.clearing_price;
+            const owners = d.filledOwners ?? d.filled_owners;
+            if (!batchId || !clearingPrice) continue;
+            qc.invalidateQueries({ queryKey: ["position"] });
+            qc.invalidateQueries({ queryKey: ["userCollateral"] });
+            qc.invalidateQueries({ queryKey: ["batchBuffer"] });
+            const you =
+              !!publicKey &&
+              Array.isArray(owners) &&
+              owners.some((o) => o?.equals?.(publicKey));
+            const fill: Fill = {
+              batchId: BigInt(batchId.toString()),
+              clearingPrice: BigInt(clearingPrice.toString()),
+              youFilled: !!you,
+              ts: Date.now(),
+            };
+            setFills((prev) => {
+              // de-dupe if the same batch settles twice via WS + replay
+              if (prev[0] && prev[0].batchId === fill.batchId) return prev;
+              return [fill, ...prev].slice(0, 50);
+            });
+          }
+        },
+        "confirmed",
+      );
     } catch {
       return;
     }
     return () => {
-      if (id !== undefined) program.removeEventListener(id);
+      if (subId !== undefined) conn.removeOnLogsListener(subId);
     };
   }, [program, publicKey, qc]);
 

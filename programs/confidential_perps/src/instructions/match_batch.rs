@@ -1,5 +1,4 @@
-// match_batch Anchor side (v0a) — comp def init + callback. process_batch.rs
-// queues the computation whose result fires this callback.
+// match_batch Anchor side (v0a) — comp def init + callback; process_batch.rs queues it.
 use crate::{
     constants::{
         BATCH_BUFFER_SEED, COMP_DEF_OFFSET_MATCH_BATCH, MARKET_SEED, MAX_ORDERS, POOL_SEED,
@@ -50,21 +49,13 @@ pub fn init_match_batch_comp_def_handler(ctx: Context<InitMatchBatchCompDef>) ->
     Ok(())
 }
 
-// Callback — wires the public BatchOutput from the MPC back into on-chain
-// state. Account contract MUST match the order process_batch passes via
-// callback_ix's extra_accs slice:
-//   [market, batch_buffer, pool,
-//    position_0..3, user_collateral_0..3]
-//
-// position_i / user_collateral_i derive against batch_buffer.orders[i].owner,
-// so process_batch must NOT reset the buffer — the callback resets it here
-// after fills land, otherwise the derivation drifts. Slots >= n_orders are
-// filled with the market key by process_batch and IGNORED here.
-//
-// Positions + collaterals are UncheckedAccount (validated manually in the
-// handler) rather than typed Box<Account>: (1) typed accounts can't validate a
-// filler/non-existent padding slot, and (2) 8 more Box<Account> would blow the
-// SBF stack budget (see JOURNAL Day 4). market/batch_buffer/pool stay typed.
+// Callback — wires the public BatchOutput back into on-chain state. extra_accs
+// order MUST match process_batch: [market, batch_buffer, pool, position_0..3,
+// user_collateral_0..3]. position_i/user_collateral_i derive against
+// batch_buffer.orders[i].owner, so the buffer is reset HERE (after fills), not in
+// process_batch, else derivation drifts; slots >= n_orders are market-key padding
+// and IGNORED. Positions+collaterals are UncheckedAccount (validated manually):
+// typed accounts can't validate padding slots and 8 Box<Account> blow the SBF stack.
 
 #[callback_accounts("match_batch")]
 #[derive(Accounts)]
@@ -165,10 +156,8 @@ pub fn match_batch_callback_handler(
         Err(_) => return Err(ErrorCode::AbortedComputation.into()),
     };
 
-    // Field order matches encrypted-ixs BatchOutput:
-    //   f0 clearing_price, f1 total_long_base, f2 total_short_base,
-    //   f3 f0_size, f4 f0_side, f5 f1_size, f6 f1_side,
-    //   f7 f2_size, f8 f2_side, f9 f3_size, f10 f3_side.
+    // Field order matches encrypted-ixs BatchOutput: f0 clearing_price, f1/f2
+    // long/short_base, then f3..f10 = (size,side) pairs for slots 0..3.
     let clearing_price = o.field_0;
     let total_long = o.field_1;
     let total_short = o.field_2;
@@ -203,9 +192,8 @@ pub fn match_batch_callback_handler(
         ctx.accounts.user_collateral_3.to_account_info(),
     ];
 
-    // Apply each real order: a filled order updates its Position (margin stays
-    // locked as backing collateral); an order that didn't cross the oracle
-    // (fill 0) gets its locked margin refunded. No order is ever stuck.
+    // Apply each real order: filled => update Position (margin stays locked);
+    // fill 0 (didn't cross) => refund locked margin. No order is ever stuck.
     let mut filled_owners: Vec<Pubkey> = Vec::new();
     for i in 0..n {
         if fill_sizes[i] == 0 {
@@ -250,9 +238,8 @@ pub fn match_batch_callback_handler(
     Ok(())
 }
 
-// Manual UserCollateral refund (zero-fill order). Validates: owned by our
-// program, address == canonical PDA for (market, owner), discriminator + owner
-// field match. Then credits `amount` and re-serializes.
+// Manual UserCollateral refund (zero-fill). Validates: program-owned, address ==
+// canonical PDA for (market,owner), discriminator + owner field; then credits amount.
 fn credit_refund(
     uc_info: &AccountInfo<'_>,
     market_key: &Pubkey,
@@ -278,11 +265,9 @@ fn credit_refund(
     Ok(())
 }
 
-// Manual Position fill (filled order). Same validation discipline as
-// credit_refund, then applies the long/short delta. Long (side=0) adds base +
-// pays quote; short (side=1) subtracts base + receives quote. Deltas widen to
-// i128. max_margin accumulates into margin_locked — released at close alongside
-// realized PnL.
+// Manual Position fill. Same validation discipline as credit_refund, then applies
+// the delta: long (side=0) +base/-quote, short (side=1) -base/+quote (i128);
+// max_margin accumulates into margin_locked, released at close with realized PnL.
 fn apply_fill_unchecked(
     pos_info: &AccountInfo<'_>,
     market_key: &Pubkey,
@@ -328,10 +313,8 @@ fn apply_fill_unchecked(
     Ok(())
 }
 
-// The pool takes the OPPOSITE of the traders' net base at the clearing price.
-// Traders net long (total_long > total_short) => pool sells the excess (short):
-// base -= d, quote += d*clearing. Net short => pool buys (long): base += d,
-// quote -= d*clearing. Balanced => untouched.
+// Pool takes the OPPOSITE of traders' net base at clearing price: net long =>
+// pool short (base-=d, quote+=d*price); net short => pool long; balanced => untouched.
 fn apply_pool(pool: &mut Pool, total_long: u64, total_short: u64, clearing_price: u64) -> Result<()> {
     let long = total_long as i128;
     let short = total_short as i128;

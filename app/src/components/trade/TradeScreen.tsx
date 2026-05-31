@@ -1,10 +1,6 @@
 "use client";
-// The /trade screen: a full-page confidential terminal.
-//   ┌ term bar — market · live SOL mark · avail margin · deposit · wallet ┐
-//   │ chart (SOL/USD candles)            │ order ticket (sealed entry)    │
-//   ├ activity — Positions · Open Orders · History ──────────────────────┤
-// Collateral is on-demand (deposit drawer). All Solana/Arcium imports stay
-// client-only — the page mounts this via dynamic(ssr:false).
+// /trade full-page terminal: term bar + chart + order ticket + activity tabs (Positions/Orders/History).
+// All Solana/Arcium imports stay client-only — mounted via dynamic(ssr:false).
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { IcebergMark } from "@/components/IcebergMark";

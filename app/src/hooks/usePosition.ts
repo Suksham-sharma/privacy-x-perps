@@ -1,7 +1,6 @@
 "use client";
-// Reads the connected wallet's Position (plaintext in v0). base_amount_lots is
-// signed: + = long, - = short; 0 / missing = no open position. Polls every 3s so
-// a keeper-cranked fill shows up even if the settle event is missed.
+// Reads the wallet's Position (plaintext in v0), polling 3s as a fallback for a
+// missed settle event. base_amount_lots is signed: + long, - short; 0 = none.
 import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { deriveMarketPda, derivePositionPda } from "@confidential-perps/sdk";

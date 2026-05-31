@@ -1,21 +1,9 @@
-// Pyth Pull Oracle reader.
-//
-// Deliberately avoids `pyth-solana-receiver-sdk`: its 1.x line pins
-// anchor-lang ^0.32.1, but Arcium pins us to 1.0.2, so it won't compile. We
-// hand-roll the minimum `PriceUpdateV2` shape and Borsh-deserialize it (layout
-// from pyth-solana-receiver-sdk v1.2.0). The owner check is the trust boundary
-// — the account must be owned by the Pyth receiver program; we never accept an
-// arbitrary Borsh blob.
-//
-// Validated, in order: (1) owner, (2) discriminator, (3) Full verification
-// (no Partial — weakens the trust model), (4) feed_id (right asset),
-// (5) freshness vs MAX_PRICE_AGE_SECS, (6) price > 0, (7) conf/price within
-// MAX_PRICE_CONF_BPS.
-//
-// Deferred to v0.2: exponent normalization (we return the raw mantissa; the
-// keeper must emit orders in Pyth's exponent, -8 for SOL/USD) and ema/TWAP
-// (perp matching wants a point estimate, not a smoothed one).
-//
+// Pyth Pull Oracle reader. Hand-rolls PriceUpdateV2 (Borsh, layout from sdk
+// v1.2.0) because the SDK pins anchor ^0.32.1 vs Arcium's 1.0.2. TRUST BOUNDARY
+// is the owner check (must be Pyth receiver-owned; never an arbitrary blob);
+// validates in order: owner, discriminator, Full verification (no Partial),
+// feed_id, freshness, price>0, conf. Deferred to v0.2: exponent normalization
+// (returns raw mantissa) and ema/TWAP.
 use crate::{
     constants::{MAX_PRICE_AGE_SECS, MAX_PRICE_CONF_BPS, PYTH_RECEIVER_PROGRAM_ID},
     error::ErrorCode,
@@ -23,9 +11,8 @@ use crate::{
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::account_info::AccountInfo;
 
-// 8-byte Anchor discriminator for `PriceUpdateV2` = first 8 bytes of
-// sha256("account:PriceUpdateV2"). Hardcoded so a layout change upstream
-// forces an explicit update here instead of silently parsing a different struct.
+// 8-byte discriminator = sha256("account:PriceUpdateV2")[..8]. Hardcoded so an
+// upstream layout change forces an explicit update, not a silent wrong-struct parse.
 const PRICE_UPDATE_V2_DISCRIMINATOR: [u8; 8] = [34, 241, 35, 99, 157, 126, 244, 205];
 
 // Borsh mirror of pyth_solana_receiver_sdk::PriceUpdateV2 (v1.2.0). Field
@@ -58,24 +45,18 @@ struct PriceFeedMessage {
     pub _ema_conf: u64,
 }
 
-// Read + validate + return a Pyth price as a u64 mantissa (the raw
-// `price_message.price`, cast from i64 after the > 0 check). See the module
-// docstring for what's validated and deferred. Callers use it directly as
-// oracle_price / exit_price; exponent normalization is the keeper's job in v0.
+// Read+validate+return the Pyth price as a u64 mantissa (raw price_message.price
+// after the >0 check). See module docstring; exponent normalization is the keeper's job in v0.
 pub fn read_pyth_price(
     price_info: &AccountInfo,
     expected_feed_id: &[u8; 32],
     clock: &Clock,
 ) -> Result<u64> {
-    // 1. Owner check — the trust anchor; without it anyone can forge a buffer
-    //    with the right discriminator.
-    //
-    // DEMO/LOCALNET (feature = "mock-oracle"): also accept an account owned by
-    // THIS program — the `set_mock_oracle` PDA a localnet crank keeps fresh.
-    // A bare validator has no Pyth publisher network, so this is the only way
-    // to get a live, ticking price locally. The remaining checks (discriminator,
-    // Full verification, feed_id, freshness, conf) still run unchanged.
-    // MUST NOT ship: the `mock-oracle` feature is stripped for devnet/mainnet.
+    // 1. Owner check — trust anchor; without it anyone forges a buffer with the
+    //    right discriminator.
+    // DEMO/LOCALNET (feature = "mock-oracle"): ALSO accept a this-program-owned
+    // account (the set_mock_oracle PDA) — only way to get a live price on a bare
+    // validator; all other checks still run. MUST NOT ship: stripped for devnet/mainnet.
     #[cfg(feature = "mock-oracle")]
     require!(
         *price_info.owner == PYTH_RECEIVER_PROGRAM_ID || *price_info.owner == crate::ID,
@@ -99,11 +80,9 @@ pub fn read_pyth_price(
         ErrorCode::InvalidPythAccount
     );
 
-    // Reader-style `deserialize`, not `try_from_slice`: real on-chain accounts
-    // are 134 bytes (Pyth allocates for the worst-case Partial variant, leaving
-    // a trailing zero) and try_from_slice errors on trailing bytes. deserialize
-    // consumes only what each field needs, so one path handles both our
-    // 133-byte localnet fixture and a real cloned-from-devnet account.
+    // Reader-style `deserialize` (not `try_from_slice`, which errors on trailing
+    // bytes): consumes only what each field needs, handling both our 133-byte
+    // fixture and a real 134-byte cloned-from-devnet account.
     let mut cursor = &data[8..];
     let parsed = PriceUpdateV2::deserialize(&mut cursor)
         .map_err(|_| error!(ErrorCode::InvalidPythAccount))?;

@@ -1,8 +1,5 @@
-// Localnet faucet. POST { wallet } → airdrops gas SOL + mints test USDC to the
-// wallet's ATA, using the localnet mint-authority keypair from FAUCET_ADMIN_SECRET
-// (server-only env, written by scripts/localnet-bootstrap.ts). Node runtime: this
-// handler signs transactions, so it needs a real Keypair + Node crypto. Mirrors
-// the fund path in scripts/lifecycle-driver.ts.
+// Localnet faucet: POST { wallet } airdrops gas SOL + mints test USDC, signing with
+// the localnet mint-authority keypair from FAUCET_ADMIN_SECRET (server-only env). Node runtime.
 import { NextResponse } from "next/server";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";

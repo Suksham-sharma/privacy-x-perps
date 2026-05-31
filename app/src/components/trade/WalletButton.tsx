@@ -1,8 +1,6 @@
 "use client";
-// Custom connect button styled in the Declassified system — avoids the wallet
-// adapter's default (purple) button CSS entirely. Uses the adapter's modal for
-// wallet selection and useWallet for the connected state. On localnet the
-// UnsafeBurnerWallet is the only choice; selecting it once persists (autoConnect).
+// Custom connect button (Declassified-styled) using the adapter's modal + useWallet.
+// On localnet the UnsafeBurnerWallet is the only choice; selecting it persists (autoConnect).
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 

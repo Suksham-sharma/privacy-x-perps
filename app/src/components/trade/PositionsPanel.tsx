@@ -1,9 +1,6 @@
 "use client";
-// Positions ledger (the Positions tab): the connected wallet's open position
-// (plaintext in v0) as a ledger row — direction, size, entry, mark, est. liq,
-// margin, and unrealized PnL marked at the on-chain index (localnet Pyth
-// fixture). Your row is accent-tinted ("your row legible"). Close →
-// close_position settles realized PnL and returns collateral.
+// Positions tab: the wallet's open position (plaintext in v0) as a ledger row, uPnL marked
+// at the on-chain index (localnet Pyth fixture). Close → close_position settles PnL + returns collateral.
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -78,6 +75,8 @@ export function PositionsPanel() {
   const entryNum = Number(entry);
   const liq = BigInt(Math.round(isLong ? entryNum * (1 - frac) : entryNum * (1 + frac)));
   const fmt = (n: number) => n.toLocaleString("en-US");
+  // Signed currency for uPnL so gain/loss reads at a glance (+$ / -$, neutral at 0).
+  const upnlStr = upnl === 0n ? `$${fmtUsdc(0n)}` : `${upnl < 0n ? "-" : "+"}$${fmtUsdc(abs(upnl))}`;
 
   return (
     <>
@@ -99,8 +98,8 @@ export function PositionsPanel() {
         <span className="c">${fmtUsdc(entry)}</span>
         <span className="c">{indexPrice !== null ? `$${fmtUsdc(indexPrice)}` : "—"}</span>
         <span className="c">${fmtUsdc(liq)}</span>
-        <span className="c">{fmtUsdc(p.marginLocked)}</span>
-        <span className={`c ${upnl > 0n ? "long" : upnl < 0n ? "short" : ""}`}>{fmtUsdc(upnl)}</span>
+        <span className="c">${fmtUsdc(p.marginLocked)}</span>
+        <span className={`c ${upnl > 0n ? "long" : upnl < 0n ? "short" : ""}`}>{upnlStr}</span>
         <span style={{ textAlign: "right" }}>
           <button className="close" onClick={close} disabled={busy}>
             {busy ? "Closing…" : "Close"}

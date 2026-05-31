@@ -7,8 +7,7 @@ export const BATCH_BUFFER_SEED = Buffer.from("batch");
 export const USER_COLLATERAL_SEED = Buffer.from("collateral");
 export const POSITION_SEED = Buffer.from("position");
 export const POOL_SEED = Buffer.from("pool");
-// DEMO/LOCALNET ONLY: program-owned mock PriceUpdateV2 a localnet crank keeps
-// fresh (program built with feature = "mock-oracle"). See set_mock_oracle.rs.
+// DEMO/LOCALNET ONLY: program-owned mock PriceUpdateV2 the crank keeps fresh (feature = "mock-oracle").
 export const MOCK_ORACLE_SEED = Buffer.from("mock_oracle");
 
 export function deriveMarketPda(programId: PublicKey): [PublicKey, number] {
@@ -58,9 +57,8 @@ export function derivePoolPda(
   );
 }
 
-// DEMO/LOCALNET ONLY: the program-owned mock PriceUpdateV2 account. Pass this as
-// `price_update` to process_batch / close_position / liquidate_position, and the
-// crank pushes live SOL into it via set_mock_oracle.
+// DEMO/LOCALNET ONLY: program-owned mock PriceUpdateV2; pass as `price_update` to
+// process_batch / close_position / liquidate_position. Crank pushes live SOL into it.
 export function deriveMockOraclePda(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([MOCK_ORACLE_SEED], programId);
 }

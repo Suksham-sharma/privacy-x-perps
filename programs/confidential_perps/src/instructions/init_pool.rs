@@ -1,10 +1,7 @@
-// init_pool — fund the singleton liquidity pool that backstops batch matching
-// (v0a). Permissionless / no admin gate (Drift-hack defensive); anyone may add
-// protocol liquidity. The USDC is moved into the SAME Market.usdc_vault that
-// holds user collateral — the pool's effective equity is the vault buffer in
-// excess of user balances (see Pool in state/mod.rs). `collateral` records the
-// cumulative funding for transparency; re-calling tops it up (idempotent
-// bootstrap).
+// init_pool — fund the singleton batch-backstop pool (v0a). Permissionless / no
+// admin gate (Drift-hack defensive). USDC goes into the SAME Market.usdc_vault as
+// user collateral; pool equity = vault buffer over user balances (see Pool).
+// `collateral` tracks cumulative funding; re-calling tops it up (idempotent).
 use crate::{
     constants::{MARKET_SEED, POOL_SEED},
     error::ErrorCode,
@@ -48,9 +45,8 @@ pub fn init_pool_handler(ctx: Context<InitPool>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::ZeroAmount);
 
     let pool = &mut ctx.accounts.pool;
-    // init_if_needed zeroes a fresh account (base/quote/collateral = 0) and
-    // leaves an existing one untouched, so setting the canonical bump is
-    // idempotent and top-up just accumulates — no first-call branch needed.
+    // init_if_needed zeroes a fresh account / leaves an existing one untouched,
+    // so setting bump is idempotent and top-up just accumulates (no first-call branch).
     pool.bump = ctx.bumps.pool;
 
     // Move USDC funder ATA -> shared program vault.

@@ -1,7 +1,6 @@
-// Cluster-agnostic runtime config, sourced from NEXT_PUBLIC_* env with
-// localnet defaults. `scripts/localnet-bootstrap.ts` emits app/.env.local with
-// the live values per `arcium localnet` run; the devnet flip is just different
-// env. Program ID is stable across clusters (arcium keeps localnet == devnet).
+// Cluster-agnostic runtime config from NEXT_PUBLIC_* env with localnet defaults
+// (bootstrap emits .env.local; devnet flip is just different env). Program ID is
+// stable across clusters.
 import { PublicKey } from "@solana/web3.js";
 
 export const RPC_URL =

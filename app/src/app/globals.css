@@ -417,7 +417,7 @@ svg.ic { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width
 .ebk-cancel:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* --- positions ledger --- */
-.tled-h, .tled-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1fr 1.1fr auto; gap: 16px; align-items: center; padding: 12px 20px; font-family: var(--mono); }
+.tled-h, .tled-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr 1fr 1.1fr 96px; gap: 16px; align-items: center; padding: 12px 20px; font-family: var(--mono); }
 .tled-h { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); background: var(--paper-2); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1; }
 .tled-h span:nth-child(n+2), .tled-row .c { text-align: right; }
 .tled-row { font-size: 13px; border-bottom: 1px solid var(--line); }

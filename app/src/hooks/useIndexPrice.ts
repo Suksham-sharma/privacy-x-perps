@@ -1,9 +1,7 @@
 "use client";
-// Live index price for the terminal. Reads the program-owned mock PriceUpdateV2
-// account that the localnet keeper keeps fresh with real SOL/USD spot, decoding
-// the i64 mantissa directly (same layout as programs/.../pyth.rs). Polls every
-// 3s so the mark ticks with the market. Returns the price in index units
-// (USD * 1e6, == USDC base units per SOL); null until the account is seeded.
+// Live index price: decodes the program-owned mock PriceUpdateV2 (kept fresh by
+// the localnet keeper), polling 3s. Returns USD * 1e6 (== USDC base units per
+// SOL); null until seeded.
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Connection } from "@solana/web3.js";

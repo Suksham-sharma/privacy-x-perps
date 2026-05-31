@@ -1,8 +1,5 @@
-// Turn a raw Anchor/web3 error into a short, human message for the UI. The
-// program throws AnchorErrors like "AnchorError thrown in …/submit_order.rs:94.
-// Error Code: BatchWindowClosed…" — useful in logs, hostile in a status line.
-// We map the known program error codes to plain guidance and fall back to a
-// trimmed message otherwise.
+// Turn a raw Anchor/web3 error into a short, human message: map known program
+// error codes to plain guidance, falling back to a trimmed message.
 const FRIENDLY: Record<string, string> = {
   BatchWindowClosed:
     "Round closed before a counterparty arrived. Cancel your order in Open Orders, then retry.",

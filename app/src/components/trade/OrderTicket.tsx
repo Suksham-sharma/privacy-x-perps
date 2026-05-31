@@ -1,11 +1,6 @@
 "use client";
-// Order ticket: pick side / size / leverage, encrypt the order CLIENT-SIDE
-// (x25519 + RescueCipher via the SDK), and submit_order. Price stays encrypted;
-// only max_margin is public. v0a matches against peers + a pool backstop and
-// clears at the live oracle; a market order just needs to CROSS the oracle
-// (long: price >= oracle, short: price <= oracle), so we encrypt the price with
-// a small cross buffer (see CROSS_BUFFER_BPS) to stay crossing as the oracle
-// ticks during the batch window.
+// Order ticket: encrypts the order client-side (x25519+RescueCipher) and submits;
+// only max_margin is public. v0a clears at the oracle (see CROSS_BUFFER_BPS).
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +22,7 @@ import { useIndexPrice } from "@/hooks/useIndexPrice";
 import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 import { PROGRAM_ID } from "@/lib/config";
 import { fmtUsdc } from "@/lib/format";
+import { stashOrder } from "@/lib/orderStash";
 import { friendlyError } from "@/lib/errors";
 
 function randomU64(): bigint {
@@ -46,7 +42,7 @@ export function OrderTicket() {
   const index = useIndexPrice();
   const qc = useQueryClient();
 
-  const [side, setSide] = useState<0 | 1>(0); // 0 long, 1 short
+  const [side, setSide] = useState<0 | 1>(0);
   const [sizeInput, setSizeInput] = useState("1");
   const [leverage, setLeverage] = useState(2);
   const [busy, setBusy] = useState(false);
@@ -75,11 +71,9 @@ export function OrderTicket() {
     setStatus({ tone: "info", msg: "Encrypting order in your browser…" });
     try {
       const clientNonce = randomU64();
-      // Cross buffer: price a market long ABOVE / short BELOW the live index so
-      // the order still crosses if the keeper pushes a fresh oracle during the
-      // ~window. v0a always clears at the oracle, so this changes only the cross
-      // gate, not the execution price (never a worse fill). max_margin below
-      // stays based on the index notional, not this buffered price.
+      // Cross buffer: price long above / short below the index so the order stays crossing
+      // if the oracle ticks. v0a clears at the oracle, so this only affects the cross gate,
+      // never the fill price; max_margin below stays on the index notional, not this buffered price.
       const CROSS_BUFFER_BPS = 200n; // 2%
       const orderPrice =
         side === 0
@@ -92,20 +86,16 @@ export function OrderTicket() {
         clientNonce,
       };
       const enc = encryptOrder(pt, mxe.data);
-      // Stash the ephemeral key for a future decryptFill path (position is
-      // plaintext in v0, so display doesn't need it).
-      try {
-        sessionStorage.setItem(
-          "iceberg.lastOrder",
-          JSON.stringify({
-            clientNonce: clientNonce.toString(),
-            privateKey: Array.from(enc.privateKey),
-            side,
-            size: size.toString(),
-            leverage,
-          }),
-        );
-      } catch {}
+      // Stash THIS order's plaintext metadata keyed by its maxMargin so the Open
+      // Orders tab can render your row in plaintext. Per-order (see orderStash):
+      // a second order no longer overwrites the first's leverage/side/size.
+      stashOrder(maxMargin, {
+        side,
+        size: size.toString(),
+        leverage,
+        clientNonce: clientNonce.toString(),
+        privateKey: Array.from(enc.privateKey),
+      });
 
       const args = toSubmitOrderArgs(enc);
       const [market] = deriveMarketPda(PROGRAM_ID);

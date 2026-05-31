@@ -1,6 +1,5 @@
-// init_market — single permissionless init; no admin gate, no upgradeability
-// (Drift-hack defensive). The pyth_feed_id arg pins the asset identifier at
-// init; every later read of a Pyth price_update account validates against it.
+// init_market — single permissionless init; no admin gate / no upgradeability
+// (Drift-hack defensive). pyth_feed_id pins the asset; every price read validates against it.
 use crate::{
     constants::{BATCH_BUFFER_SEED, DEFAULT_BATCH_WINDOW_SLOTS, MARKET_SEED},
     state::{BatchBuffer, EncryptedOrderSlot, Market},

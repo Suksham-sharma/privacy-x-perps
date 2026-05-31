@@ -2,13 +2,10 @@ use anchor_lang::prelude::*;
 
 use crate::constants::MAX_ORDERS;
 
-// SOL-PERP market. Init once, immutable thereafter (Drift-hack defensive);
-// no admin field by design — no admin instructions exist, ever.
-//
-// `pyth_feed_id` is the 32-byte Pyth feed identifier, NOT an account pubkey:
-// PriceUpdateV2 accounts have unstable addresses (fresh keypair per update)
-// but carry a stable feed_id inside. Pinned at init and validated against
-// every price_update account. SOL/USD is SOL_USD_FEED_ID in constants.rs.
+// SOL-PERP market. Init once, immutable (Drift-hack defensive); no admin field
+// by design. `pyth_feed_id` is the 32-byte feed id (NOT an account pubkey —
+// PriceUpdateV2 addresses are unstable, the feed_id inside is stable); pinned at
+// init and validated against every price_update. SOL/USD = SOL_USD_FEED_ID.
 #[account]
 pub struct Market {
     pub pyth_feed_id: [u8; 32],   // locked at init; 32-byte Pyth asset id
@@ -30,13 +27,10 @@ impl Market {
     pub const SIZE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 8 + 8;
 }
 
-// One encrypted order slot in the batch buffer.
-//
-// max_margin is PUBLIC by design — the USDC base-unit amount locked from
-// UserCollateral.balance at submit_order. Refunded on NoMatch, retained on any
-// fill (v0 can't refund partial-fill excess: the circuit reveals fill_size, not
-// original size, so a proportional refund would leak it). v0 trusts the user to
-// size max_margin; circuit-side margin validation is v0.2.
+// One encrypted order slot in the batch buffer. max_margin is PUBLIC by design
+// (USDC locked at submit, refunded on NoMatch / retained on fill — v0 can't
+// refund partial-fill excess without leaking original size). Circuit-side margin
+// validation is v0.2.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct EncryptedOrderSlot {
     pub owner: Pubkey,            // for fill / refund routing
@@ -53,14 +47,11 @@ impl EncryptedOrderSlot {
     pub const SIZE: usize = 32 + 32 + 16 + 8 + 32 + 32 + 32 + 32;
 }
 
-// Rolling buffer, reused across batches: process_batch flips is_processing,
-// the callback resets n_orders + orders[] and bumps batch_id.
-//
-// is_processing is false at init and after each callback, true between
-// process_batch (queue_computation) and the callback firing. While true,
-// submit_order rejects new orders and process_batch refuses to re-queue (no
-// double-spend of the same orders). v0 caveat: if Arcium drops the computation
-// the buffer is stuck until manual recovery; timeout/cancel is v0.2.
+// Rolling buffer reused across batches: process_batch flips is_processing, the
+// callback resets n_orders+orders[] and bumps batch_id. is_processing (true
+// between queue and callback) blocks new submits + re-queue => no double-spend of
+// the same orders. v0 caveat: a dropped Arcium computation sticks the buffer
+// until manual recovery; timeout/cancel is v0.2.
 #[account]
 pub struct BatchBuffer {
     pub market: Pubkey,
@@ -92,23 +83,14 @@ impl UserCollateral {
     pub const SIZE: usize = 8 + 32 + 8 + 1;
 }
 
-// Per-user perp position, one per (market, owner). Plain (publicly readable)
-// in v0 — see docs/circuit-v0.md "v0 vs v0.2"; encrypted commitment is v0.2
-// (task #21).
-//
-// Units (v0):
+// Per-user perp position, one per (market, owner). Publicly readable in v0
+// (encrypted commitment is v0.2). Units (v0):
 //   base_amount_lots — signed lots of base (SOL): + long, - short.
-//   quote_entry     — signed cumulative cost basis in lot-ticks (sum over fills
-//                      of ±fill_size_lots * clearing_price_ticks). Negative when
-//                      long, positive when short. i128 absorbs accumulation.
-//   margin_locked   — sum of max_margin from every order filled into this
-//                      position (USDC base units), released at close. Always the
-//                      committed margin, not the required one (v0 doesn't refund
-//                      partial-fill excess — would leak size).
-//
-// lot-ticks are treated 1:1 with USDC base units, so PnL = base_amount_lots *
-// exit_price + quote_entry is directly comparable to margin_locked. Real
-// TICK_SIZE/LOT_SIZE calibration is post-v0.
+//   quote_entry     — signed cost basis in lot-ticks (Σ ±size*price), i128.
+//   margin_locked   — Σ max_margin of filled orders (USDC base units), released
+//                      at close; committed not required (no partial-fill refund — leaks size).
+// lot-ticks ≈ USDC base units 1:1, so PnL = base*exit_price + quote_entry is
+// comparable to margin_locked. Real TICK_SIZE/LOT_SIZE calibration is post-v0.
 #[account]
 pub struct Position {
     pub owner: Pubkey,
@@ -123,21 +105,13 @@ impl Position {
     pub const SIZE: usize = 8 + 32 + 8 + 16 + 8 + 1;
 }
 
-// Singleton liquidity pool per market (v0a) — the guaranteed counterparty.
-// Each batch, peers net against each other and the pool absorbs only the
-// leftover imbalance at the oracle clearing price: pool base += (short - long).
-// When the two sides match exactly, the pool is untouched (pure peer-to-peer).
-//
-// `base_amount_lots` / `quote_entry` mirror Position's units (signed lots; cost
-// basis in lot-ticks ≈ USDC base units in v0) so the pool's mark-to-market PnL
-// is `base_amount_lots * mark + quote_entry`, same formula as a user position.
-//
-// `collateral` records the protocol funding deposited into Market.usdc_vault at
-// init_pool. v0 simplification: the pool's effective equity is the vault buffer
-// (vault balance in excess of Σ user collateral); trader PnL is paid from /
-// absorbed by that shared buffer rather than reconciled into `collateral` every
-// batch. Continuous solvency settlement + the MAX_POOL_BASE skew cap are the
-// next hardening pass — see constants.rs. Demo sizes are tiny vs the funding.
+// Singleton per-market liquidity pool (v0a) — guaranteed counterparty that
+// absorbs the residual at the oracle price: pool base += (short - long), untouched
+// when balanced. base_amount_lots/quote_entry mirror Position's units, so PnL =
+// base*mark + quote_entry. `collateral` tracks init_pool funding into
+// Market.usdc_vault; v0 simplification: pool equity = vault buffer over Σ user
+// collateral, trader PnL paid from that shared buffer. SAFETY: continuous solvency
+// settlement + the MAX_POOL_BASE skew cap are the next hardening pass (constants.rs).
 #[account]
 pub struct Pool {
     pub base_amount_lots: i64,

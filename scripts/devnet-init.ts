@@ -1,16 +1,6 @@
-// Devnet bootstrap: post-deploy init for the perp engine. Run AFTER
-// `arcium deploy --cluster-offset 456 ... --rpc-url devnet` succeeds.
-// Idempotent — re-running skips already-initialized accounts.
-//
-//   pnpm exec ts-node scripts/devnet-init.ts
-//
-// Mirrors tests/matching.ts's `init` block:
-//   1. Create a fresh USDC mint (we control its authority; canonical 4zMMC9…
-//      is Circle-owned, so we can't mint to ourselves).
-//   2. init_market — creates Market + BatchBuffer + USDC vault ATA.
-//   3. init_match_batch_comp_def — registers the match_batch circuit with the
-//      MXE so process_batch can queue computations.
-//   4. uploadCircuit — pushes the compiled match_batch.arcis to Arcium.
+// Devnet post-deploy init (idempotent): creates a fresh USDC mint we control (canonical Circle USDC
+// is unmintable by us), init_market, init_match_batch_comp_def, and uploads match_batch.arcis. Run
+// AFTER `arcium deploy --cluster-offset 456 --rpc-url devnet`:  pnpm exec ts-node scripts/devnet-init.ts
 
 import * as anchor from "@anchor-lang/core";
 import { Program } from "@anchor-lang/core";

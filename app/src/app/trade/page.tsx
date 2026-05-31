@@ -1,7 +1,5 @@
 "use client";
-// /trade — confidential perps terminal. The screen is loaded with ssr:false so
-// all the Solana/Anchor/Arcium imports (and window-touching wallet UI) only ever
-// run in the browser (the SSR-dodge from review refinement 4b).
+// /trade terminal — loaded ssr:false so all Solana/Anchor/Arcium + wallet UI runs browser-only.
 import dynamic from "next/dynamic";
 
 const TradeScreen = dynamic(() => import("@/components/trade/TradeScreen"), {
