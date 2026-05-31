@@ -13,7 +13,7 @@ async function main() {
   const admin = Keypair.fromSecretKey(
     Buffer.from(JSON.parse(fs.readFileSync(process.env.ANCHOR_WALLET ?? path.join(os.homedir(), ".config/solana/id.json"), "utf8"))),
   );
-  const connection = new Connection("http://127.0.0.1:8899", "confirmed");
+  const connection = new Connection(process.env.SOLANA_RPC_URL ?? "http://127.0.0.1:8899", "confirmed");
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(admin), { commitment: "confirmed" });
   anchor.setProvider(provider);
   const idl = JSON.parse(fs.readFileSync("target/idl/confidential_perps.json", "utf8"));

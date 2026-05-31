@@ -9,7 +9,7 @@ size, and price stay invisible to everyone .
 Like an iceberg order, your size stays below the surface — only here, nothing shows pre-match
 at all. Built for the Solana India Fellowship (SIF).
 
-**Status:** devnet program `2vfSYJP69cyoVrpN2p91Cu4aZKMYbEesQtDJMu2LRNJ1` · one market (SOL-PERP)
+**Status:** devnet program `EhTFnsoyZp9aRYoZrFPVPtokiRLwjxvAgZAuEQG8yZgF` · one market (SOL-PERP)
 · USDC collateral · full lifecycle proven end-to-end on a local Arcium cluster. Not audited.
 
 ---

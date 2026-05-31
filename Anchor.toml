@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-confidential_perps = "2vfSYJP69cyoVrpN2p91Cu4aZKMYbEesQtDJMu2LRNJ1"
+confidential_perps = "EhTFnsoyZp9aRYoZrFPVPtokiRLwjxvAgZAuEQG8yZgF"
 
 [provider]
 cluster = "localnet"
@@ -18,9 +18,6 @@ test = "pnpm exec ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
 [hooks]
 
 [test]
-# Generous startup_wait (was 5000) because [[test.validator.clone]] makes
-# the validator do a devnet RPC round-trip for the Pyth receiver program
-# on boot. 5s wasn't always enough; 20s gives slack on flaky networks.
 startup_wait = 20000
 shutdown_wait = 2000
 upgradeable = false

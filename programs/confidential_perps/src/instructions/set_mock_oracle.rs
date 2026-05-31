@@ -66,9 +66,12 @@ pub fn set_mock_oracle_handler(ctx: Context<SetMockOracle>, price: i64) -> Resul
     data[8..40].fill(0); // write_authority — never validated
     data[40] = 1; // verification_level = Full
     data[41..73].copy_from_slice(&SOL_USD_FEED_ID);
-    data[73..81].copy_from_slice(&price.to_le_bytes()); // price (raw mantissa, exp 0 in v0)
+    // The keeper pushes `price` already in USD*1e6 (the internal unit). With
+    // exponent -6, read_pyth_price normalizes it as mantissa * 10^(-6+6) = x1,
+    // leaving it as USD*1e6 — matching how it treats a real feed (devnet is -8).
+    data[73..81].copy_from_slice(&price.to_le_bytes()); // mantissa = USD*1e6
     data[81..89].copy_from_slice(&0u64.to_le_bytes()); // conf = 0 (well under MAX_PRICE_CONF_BPS)
-    data[89..93].copy_from_slice(&0i32.to_le_bytes()); // exponent
+    data[89..93].copy_from_slice(&(-6i32).to_le_bytes()); // exponent -6 (USD*1e6 mantissa)
     data[93..101].copy_from_slice(&clock.unix_timestamp.to_le_bytes()); // publish_time
     data[101..109].copy_from_slice(&clock.unix_timestamp.to_le_bytes()); // prev_publish_time
     data[109..117].copy_from_slice(&price.to_le_bytes()); // ema_price

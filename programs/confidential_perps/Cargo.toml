@@ -9,12 +9,12 @@ crate-type = ["cdylib", "lib"]
 name = "confidential_perps"
 
 [features]
-# v0 NOTE: `test-stale-ok` is on by default because `arcium build` has no
-# `--features` flag and our tests need the looser freshness window for
-# the cloned-from-devnet PriceUpdateV2 (publish_time frozen at clone-time).
-# Pre-mainnet TODO: strip `test-stale-ok` from `default` and verify the
-# 30s window holds against real-time Pyth pushes on devnet.
-default = ["test-stale-ok", "mock-oracle"]
+# REAL-NETWORK BUILD: `default` is empty so devnet/mainnet builds use the real
+# Pyth owner check and the 60s freshness window (constants.rs). `arcium build`
+# has no `--features` flag, so the ONLY way to enable a feature is to list it
+# here. The localnet TEST suite does not need any feature: it reads the synthetic
+# fixture (tests/fixtures/pyth_sol_usd.json, publish_time=i64::MAX), not the mock.
+default = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
@@ -23,16 +23,12 @@ idl-build = ["anchor-lang/idl-build", "arcium-anchor/idl-build", "anchor-spl/idl
 anchor-debug = []
 custom-heap = []
 custom-panic = []
-# Loosen Pyth freshness check (30s -> 600s) for localnet tests that read
-# a cloned PriceUpdateV2 whose publish_time is frozen at clone-time. Off
-# in any prod build.
-test-stale-ok = []
-# DEMO/LOCALNET ONLY. Enables the `set_mock_oracle` instruction and lets
-# `read_pyth_price` accept a program-owned mock PriceUpdateV2 account, so a
-# localnet crank can push a live SOL/USD price (no Wormhole/publisher network
-# exists on a bare validator). In `default` because `arcium build` has no
-# `--features` flag. SECURITY: this relaxes the oracle owner check (the trust
-# boundary) — MUST be stripped from `default` before any devnet/mainnet build.
+# LOCALNET LIVE-ORACLE DEV ONLY. Enables `set_mock_oracle` + lets read_pyth_price
+# accept a program-owned mock PriceUpdateV2, so a localnet crank can push a live
+# SOL/USD price (no Wormhole/publisher network exists on a bare validator). To use
+# it, temporarily add "mock-oracle" to `default` above and rebuild. SECURITY: it
+# relaxes the oracle owner check (the trust boundary) — NEVER ship a build with
+# this in `default` to devnet/mainnet.
 mock-oracle = []
 
 [dependencies]

@@ -1,7 +1,9 @@
 // Liquidation + batch cranker keeper (poll loop): cranks permissionless process_batch on a
 // closed non-empty batch (v0a pool backstop — lone orders fill the pool, no brick), and
 // liquidates positions where credit < margin/2. Env: SOLANA_RPC_URL, ANCHOR_WALLET,
-// ARCIUM_CLUSTER_OFFSET (0 localnet / 456 devnet), PYTH_PRICE_UPDATE, KEEPER_INTERVAL_MS, KEEPER_ONCE.
+// ARCIUM_CLUSTER_OFFSET (0 localnet / 456 devnet), PYTH_PRICE_UPDATE, KEEPER_INTERVAL_MS, KEEPER_ONCE,
+// KEEPER_PUSH_MOCK_ORACLE (default true; set "false" on devnet — set_mock_oracle is compiled out of
+// a real-network build, and the real Pyth feed is pushed by Pyth, not us).
 
 import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import * as anchor from "@anchor-lang/core";
@@ -20,6 +22,7 @@ import {
   deriveBatchBufferPda,
   deriveUserCollateralPda,
   deriveMockOraclePda,
+  readNormalizedPythPrice,
 } from "@confidential-perps/sdk";
 import { randomBytes } from "crypto";
 import * as fs from "fs";
@@ -43,6 +46,11 @@ const ONCE = !!process.env.KEEPER_ONCE;
 // How often to push a fresh price (multiple of POLL ticks). Keep SOL/USD live
 // without spamming a tx every single tick.
 const ORACLE_PUSH_EVERY_TICKS = Number(process.env.ORACLE_PUSH_EVERY_TICKS ?? 1);
+// LOCALNET only: the keeper pushes a live SOL/USD into the program-owned mock
+// oracle. On devnet set KEEPER_PUSH_MOCK_ORACLE=false — set_mock_oracle is
+// compiled out of the real-network build, and the real feed is maintained by Pyth.
+const PUSH_MOCK_ORACLE =
+  (process.env.KEEPER_PUSH_MOCK_ORACLE ?? "true").toLowerCase() !== "false";
 
 function ts() {
   return new Date().toISOString().slice(11, 23);
@@ -50,16 +58,6 @@ function ts() {
 function log(msg: string, data?: Record<string, unknown>) {
   const tail = data ? "  " + JSON.stringify(data) : "";
   console.log(`[${ts()}] ${msg}${tail}`);
-}
-
-// PriceUpdateV2 layout (mirrors src/pyth.rs): after 8-byte discriminator, write_authority(32),
-// verification_lvl(1, byte 40: 0=Partial+u8/1=Full), feed_id(32), price(i64 LE at 73 Full / 74 Partial).
-function readPythPrice(data: Buffer): bigint {
-  if (data.length < 81) throw new Error(`pyth account too short: ${data.length}`);
-  const verLevel = data[8 + 32];
-  // Partial encodes [0, num_sigs_u8] = 2 bytes; Full encodes [1] = 1 byte.
-  const priceOffset = verLevel === 1 ? 8 + 32 + 1 + 32 : 8 + 32 + 2 + 32;
-  return data.readBigInt64LE(priceOffset);
 }
 
 // Live SOL/USD spot from Binance (same source the chart uses). Returns the
@@ -174,7 +172,12 @@ async function maybeLiquidate(
     log("pyth account missing, skipping liquidations");
     return;
   }
-  const price = readPythPrice(pythAcc.data);
+  // Normalized to USD*1e6 — same units positions store, so PnL math lines up.
+  const price = readNormalizedPythPrice(pythAcc.data);
+  if (price === null) {
+    log("pyth price unreadable/non-positive, skipping liquidations");
+    return;
+  }
 
   const positions = (await program.account.position.all()) as Array<{
     publicKey: PublicKey;
@@ -228,8 +231,9 @@ async function tick(
   priceAccount: PublicKey,
   tickNo: number,
 ) {
-  // Push the live price FIRST so crank/liquidation read a fresh oracle.
-  if (tickNo % ORACLE_PUSH_EVERY_TICKS === 0) {
+  // LOCALNET: push the live price FIRST so crank/liquidation read a fresh mock
+  // oracle. Skipped on devnet (PUSH_MOCK_ORACLE=false) — the real feed is Pyth's.
+  if (PUSH_MOCK_ORACLE && tickNo % ORACLE_PUSH_EVERY_TICKS === 0) {
     try {
       await maybePushOracle(program, priceAccount, payer);
     } catch (e: any) {

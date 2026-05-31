@@ -2,10 +2,14 @@
 // v1.2.0) because the SDK pins anchor ^0.32.1 vs Arcium's 1.0.2. TRUST BOUNDARY
 // is the owner check (must be Pyth receiver-owned; never an arbitrary blob);
 // validates in order: owner, discriminator, Full verification (no Partial),
-// feed_id, freshness, price>0, conf. Deferred to v0.2: exponent normalization
-// (returns raw mantissa) and ema/TWAP.
+// feed_id, freshness, price>0, conf. Returns the price NORMALIZED to the
+// protocol's internal fixed-point (USD * 1e6 = USDC base units per SOL) using
+// the on-chain exponent, so a feed at any exponent (devnet SOL/USD is -8) reads
+// in the same units the matching circuit and orders use. Deferred to v0.2: ema/TWAP.
 use crate::{
-    constants::{MAX_PRICE_AGE_SECS, MAX_PRICE_CONF_BPS, PYTH_RECEIVER_PROGRAM_ID},
+    constants::{
+        INTERNAL_PRICE_DECIMALS, MAX_PRICE_AGE_SECS, MAX_PRICE_CONF_BPS, PYTH_RECEIVER_PROGRAM_ID,
+    },
     error::ErrorCode,
 };
 use anchor_lang::prelude::*;
@@ -38,15 +42,15 @@ struct PriceFeedMessage {
     pub feed_id: [u8; 32],
     pub price: i64,
     pub conf: u64,
-    pub _exponent: i32,
+    pub exponent: i32,
     pub publish_time: i64,
     pub _prev_publish_time: i64,
     pub _ema_price: i64,
     pub _ema_conf: u64,
 }
 
-// Read+validate+return the Pyth price as a u64 mantissa (raw price_message.price
-// after the >0 check). See module docstring; exponent normalization is the keeper's job in v0.
+// Read+validate the Pyth price and return it normalized to the protocol's
+// internal fixed-point (USD * 1e6). See module docstring.
 pub fn read_pyth_price(
     price_info: &AccountInfo,
     expected_feed_id: &[u8; 32],
@@ -114,7 +118,8 @@ pub fn read_pyth_price(
     let price_u64 = parsed.price_message.price as u64;
 
     // 7. Confidence guardrail: reject if conf exceeds MAX_PRICE_CONF_BPS of
-    //    the price. u128 avoids overflow on `conf * 10_000`.
+    //    the price. Done on the RAW mantissa — conf/price is a scale-invariant
+    //    ratio, so the exponent is irrelevant here. u128 avoids overflow.
     let conf_bps = (parsed.price_message.conf as u128)
         .checked_mul(10_000)
         .ok_or(ErrorCode::MathOverflow)?
@@ -125,5 +130,73 @@ pub fn read_pyth_price(
         ErrorCode::PythConfidenceTooWide
     );
 
-    Ok(price_u64)
+    // 8. Normalize the raw mantissa to the protocol's internal fixed-point.
+    let normalized = normalize_price_to_internal(price_u64, parsed.price_message.exponent)?;
+    // A feed so coarse it normalizes to zero (e.g. sub-$0.000001) is unusable.
+    require!(normalized > 0, ErrorCode::PythPriceInvalid);
+
+    Ok(normalized)
+}
+
+// Pyth reports `mantissa * 10^exponent = USD`; the protocol prices in USD * 1e6
+// (= USDC base units per SOL), so internal = mantissa * 10^(exponent + INTERNAL).
+// Devnet SOL/USD is exponent -8 -> shift -2 -> divide by 100. The localnet mock
+// writes exponent -6 -> shift 0 -> identity (its mantissa is already USD*1e6).
+// Pure + checked so it can be unit-tested without a validator/MXE.
+pub fn normalize_price_to_internal(mantissa: u64, exponent: i32) -> Result<u64> {
+    let shift = exponent
+        .checked_add(INTERNAL_PRICE_DECIMALS)
+        .ok_or(ErrorCode::MathOverflow)?;
+    if shift >= 0 {
+        let factor = 10u64
+            .checked_pow(shift as u32)
+            .ok_or(ErrorCode::MathOverflow)?;
+        mantissa.checked_mul(factor).ok_or(error!(ErrorCode::MathOverflow))
+    } else {
+        let divisor = 10u64
+            .checked_pow((-shift) as u32)
+            .ok_or(ErrorCode::MathOverflow)?;
+        mantissa.checked_div(divisor).ok_or(error!(ErrorCode::MathOverflow))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_price_to_internal;
+
+    #[test]
+    fn devnet_exponent_minus_8_divides_by_100() {
+        // Real devnet SOL/USD: mantissa 8_169_415_086 @ expo -8 == $81.69
+        // -> internal USD*1e6 = 81_694_150 (truncating division).
+        assert_eq!(normalize_price_to_internal(8_169_415_086, -8).unwrap(), 81_694_150);
+    }
+
+    #[test]
+    fn localnet_fixture_mantissa_normalizes_to_test_peg() {
+        // tests/fixtures/pyth_sol_usd.json: 10_000_000 @ expo -8 -> 100_000.
+        assert_eq!(normalize_price_to_internal(10_000_000, -8).unwrap(), 100_000);
+    }
+
+    #[test]
+    fn mock_exponent_minus_6_is_identity() {
+        // set_mock_oracle writes mantissa already in USD*1e6 @ expo -6 -> unchanged.
+        assert_eq!(normalize_price_to_internal(82_410_000, -6).unwrap(), 82_410_000);
+    }
+
+    #[test]
+    fn exponent_zero_scales_up_by_1e6() {
+        assert_eq!(normalize_price_to_internal(83, 0).unwrap(), 83_000_000);
+    }
+
+    #[test]
+    fn overflow_is_an_error_not_a_panic() {
+        // A huge positive exponent would overflow u64 -> must return Err, not wrap.
+        assert!(normalize_price_to_internal(1_000_000, 30).is_err());
+    }
+
+    #[test]
+    fn sub_micro_dollar_truncates_to_zero() {
+        // mantissa 5 @ expo -8 -> 5/100 -> 0 (caller rejects 0 as PythPriceInvalid).
+        assert_eq!(normalize_price_to_internal(5, -8).unwrap(), 0);
+    }
 }

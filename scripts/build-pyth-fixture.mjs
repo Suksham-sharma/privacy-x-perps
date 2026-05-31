@@ -1,6 +1,8 @@
-// Build a synthetic Pyth PriceUpdateV2 fixture for localnet (synthetic, not cloned: price=100_000 matches
-// test orders' ±5% band, and publish_time=i64::MAX never goes stale). Layout mirrors PriceUpdateV2 exactly
-// to pass read_pyth_price's gates. Run from repo root: node scripts/build-pyth-fixture.mjs → tests/fixtures/pyth_sol_usd.json
+// Build a synthetic Pyth PriceUpdateV2 fixture for localnet. Shaped like the REAL devnet SOL/USD feed:
+// exponent -8, mantissa 10_000_000 — which read_pyth_price normalizes (mantissa * 10^(expo+6) = /100) to
+// 100_000, the internal USD*1e6 price every test order uses. publish_time=i64::MAX never goes stale.
+// Layout mirrors PriceUpdateV2 exactly to pass read_pyth_price's gates AND exercise the exponent-normalize
+// path. Run from repo root: node scripts/build-pyth-fixture.mjs → tests/fixtures/pyth_sol_usd.json
 
 import { writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -28,12 +30,12 @@ off += 32;
 buf.writeUInt8(1, off); off += 1;
 // PriceFeedMessage starts here.
 Buffer.from(SOL_USD_FEED_ID_HEX, "hex").copy(buf, off); off += 32;
-buf.writeBigInt64LE(100_000n, off); off += 8;       // price = 100_000
-buf.writeBigUInt64LE(100n, off); off += 8;          // conf  = 100 (~0.1% — well under 1% cap)
-buf.writeInt32LE(0, off); off += 4;                  // exponent (we don't normalize in v0)
+buf.writeBigInt64LE(10_000_000n, off); off += 8;    // price mantissa (10_000_000 @ expo -8 -> /100 -> 100_000 internal)
+buf.writeBigUInt64LE(1_000n, off); off += 8;        // conf = 1000 (0.01% of mantissa — well under 1% cap)
+buf.writeInt32LE(-8, off); off += 4;                 // exponent -8 (matches real devnet SOL/USD; exercises normalize)
 buf.writeBigInt64LE(9223372036854775807n, off); off += 8;  // publish_time = i64::MAX
 buf.writeBigInt64LE(9223372036854775807n, off); off += 8;  // prev_publish_time
-buf.writeBigInt64LE(100_000n, off); off += 8;       // ema_price
+buf.writeBigInt64LE(10_000_000n, off); off += 8;    // ema_price
 buf.writeBigUInt64LE(100n, off); off += 8;          // ema_conf
 // posted_slot
 buf.writeBigUInt64LE(0n, off); off += 8;

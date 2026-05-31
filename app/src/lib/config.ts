@@ -8,7 +8,7 @@ export const RPC_URL =
 
 export const PROGRAM_ID = new PublicKey(
   process.env.NEXT_PUBLIC_PROGRAM_ID ??
-    "2vfSYJP69cyoVrpN2p91Cu4aZKMYbEesQtDJMu2LRNJ1",
+    "EhTFnsoyZp9aRYoZrFPVPtokiRLwjxvAgZAuEQG8yZgF",
 );
 
 // Localnet arcium cluster is always offset 0 (see lifecycle-driver.ts).

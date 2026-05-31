@@ -1,6 +1,7 @@
 // Devnet post-deploy init (idempotent): creates a fresh USDC mint we control (canonical Circle USDC
-// is unmintable by us), init_market, init_match_batch_comp_def, and uploads match_batch.arcis. Run
-// AFTER `arcium deploy --cluster-offset 456 --rpc-url devnet`:  pnpm exec ts-node scripts/devnet-init.ts
+// is unmintable by us), init_market, init_pool (v0a backstop), init_match_batch_comp_def, and uploads
+// match_batch.arcis. Run AFTER `arcium deploy --cluster-offset 456 --rpc-url devnet`:
+//   pnpm exec tsx scripts/devnet-init.ts
 
 import * as anchor from "@anchor-lang/core";
 import { Program } from "@anchor-lang/core";
@@ -10,6 +11,8 @@ import {
   TOKEN_PROGRAM_ID,
   createMint,
   getAssociatedTokenAddress,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
 } from "@solana/spl-token";
 import {
   getArciumProgram,
@@ -20,7 +23,11 @@ import {
   getLookupTableAddress,
   uploadCircuit,
 } from "@arcium-hq/client";
-import { deriveMarketPda, deriveBatchBufferPda } from "@confidential-perps/sdk";
+import {
+  deriveMarketPda,
+  deriveBatchBufferPda,
+  derivePoolPda,
+} from "@confidential-perps/sdk";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -29,6 +36,10 @@ import { ConfidentialPerps } from "../target/types/confidential_perps";
 const USDC_DECIMALS = 6;
 const SOL_USD_FEED_ID_HEX =
   "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
+// v0a liquidity backstop: the protocol pool absorbs each batch's net imbalance.
+// Funded from OUR devnet USDC mint (not real liquidity — demo buffer over user
+// collateral). Generous vs demo sizes; the real guard is MAX_POOL_BASE (constants.rs).
+const POOL_FUNDING_USDC = 100_000;
 
 async function main() {
   const rpcUrl = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
@@ -117,6 +128,46 @@ async function main() {
     console.log("init_market    : OK  tx", sig);
   }
 
+  // -- init_pool (v0a backstop) --
+  // The admin wallet is this mint's authority (created above), so it mints the
+  // funding to itself and deposits it into the shared vault. Idempotent: skip if
+  // the pool PDA already exists (init_pool would otherwise top it up each re-run).
+  const [poolPda] = derivePoolPda(marketPda, program.programId);
+  if (await connection.getAccountInfo(poolPda)) {
+    console.log("init_pool      : SKIP (pool already funded)");
+  } else {
+    const funderAta = await getOrCreateAssociatedTokenAccount(
+      connection,
+      wallet.payer,
+      usdcMint,
+      wallet.publicKey,
+    );
+    const fundingBase = BigInt(POOL_FUNDING_USDC) * BigInt(10 ** USDC_DECIMALS);
+    await mintTo(
+      connection,
+      wallet.payer,
+      usdcMint,
+      funderAta.address,
+      wallet.publicKey,
+      fundingBase,
+    );
+    const sig = await program.methods
+      .initPool(new anchor.BN(fundingBase.toString()))
+      .accounts({
+        funder: wallet.publicKey,
+        market: marketPda,
+        pool: poolPda,
+        usdcVault: vaultAta,
+        funderTokenAccount: funderAta.address,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc({ skipPreflight: true, commitment: "confirmed" });
+    console.log(
+      `init_pool      : OK  funded ${POOL_FUNDING_USDC.toLocaleString()} USDC  tx ${sig}`,
+    );
+  }
+
   // -- init_match_batch_comp_def --
   const baseSeed = getArciumAccountBaseSeed("ComputationDefinitionAccount");
   const offset = getCompDefAccOffset("match_batch");
@@ -178,6 +229,10 @@ async function main() {
   if (Buffer.from(market.pythFeedId).toString("hex") !== SOL_USD_FEED_ID_HEX) {
     throw new Error("pyth_feed_id mismatch — re-init required");
   }
+
+  const pool = await (program.account as any).pool.fetch(poolPda);
+  console.log("pool collateral      :", (Number(pool.collateral) / 1e6).toLocaleString(), "USDC");
+  console.log("pool base_amount_lots:", pool.baseAmountLots.toString());
 
   console.log("\nDevnet bootstrap complete.");
   console.log("Explorer: https://explorer.solana.com/address/" +

@@ -18,12 +18,19 @@ pub const SOL_USD_FEED_ID: [u8; 32] = [
     0x0f, 0x4c, 0xfa, 0xc8, 0xc2, 0x80, 0xb5, 0x6d,
 ];
 
-// Max Pyth price staleness. 30s (Drift/Mango-style); `test-stale-ok` loosens
-// to 10min so localnet can read a cloned-from-devnet account with frozen publish_time.
-#[cfg(feature = "test-stale-ok")]
-pub const MAX_PRICE_AGE_SECS: u64 = 600;
-#[cfg(not(feature = "test-stale-ok"))]
-pub const MAX_PRICE_AGE_SECS: u64 = 30;
+// Max Pyth price staleness. Devnet's sponsored SOL/USD feed updates on a ~20s
+// cadence (observed inter-update gaps 4-22s, occasionally ~38s old at read
+// time), so a strict 30s window intermittently trips PythPriceStale and bricks a
+// crank. 60s absorbs that variance while staying ~10x tighter than the old
+// localnet 600s. MAINNET: Pyth updates sub-second — tighten to <=30s (or make it
+// a per-market field) before mainnet. The localnet test fixture sets
+// publish_time = i64::MAX, so it is never gated by this value.
+pub const MAX_PRICE_AGE_SECS: u64 = 60;
+
+// Protocol-internal price fixed-point: USD * 1e6 (= USDC base units per SOL,
+// since USDC has 6 decimals and 1 lot = 1 SOL). read_pyth_price normalizes any
+// feed exponent into this scale; orders and the matching circuit price in it too.
+pub const INTERNAL_PRICE_DECIMALS: i32 = 6;
 
 // Reject prices whose conf interval exceeds this fraction of price (100bps=1%).
 // Drift-style guardrail: wide conf = publishers disagree = liquidation-cascade risk.
