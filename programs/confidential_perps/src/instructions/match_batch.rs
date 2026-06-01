@@ -11,8 +11,10 @@ use crate::{
 };
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
+use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
+use arcium_macros::circuit_hash;
 
-#[init_computation_definition_accounts("match_batch", payer)]
+#[init_computation_definition_accounts("match_batch_oc", payer)]
 #[derive(Accounts)]
 pub struct InitMatchBatchCompDef<'info> {
     #[account(mut)]
@@ -45,7 +47,22 @@ pub struct InitMatchBatchCompDef<'info> {
 }
 
 pub fn init_match_batch_comp_def_handler(ctx: Context<InitMatchBatchCompDef>) -> Result<()> {
-    init_computation_def(ctx.accounts, None)?;
+    // Circuit source is env-gated (ArcInfer pattern): a devnet/mainnet build sets
+    // MATCH_BATCH_CIRCUIT_URL so the comp_def points at the off-chain .arcis —
+    // large circuits (ours is ~739KB / ~1.1B ACU) stall on-chain on public
+    // clusters (nodes accept into the execpool but never execute). An unset env
+    // (localnet tests) falls back to None => on-chain upload. circuit_hash! reads
+    // build/match_batch_oc.hash at compile time; ARX nodes verify it after fetch.
+    // `arcium build` ignores cargo --features, but option_env! reads the process
+    // env at compile time regardless — that's why this is env-gated, not a feature.
+    let circuit_source = match option_env!("MATCH_BATCH_CIRCUIT_URL") {
+        Some(url) => Some(CircuitSource::OffChain(OffChainCircuitSource {
+            source: url.to_string(),
+            hash: circuit_hash!("match_batch_oc"),
+        })),
+        None => None,
+    };
+    init_computation_def(ctx.accounts, circuit_source)?;
     Ok(())
 }
 
@@ -57,9 +74,9 @@ pub fn init_match_batch_comp_def_handler(ctx: Context<InitMatchBatchCompDef>) ->
 // and IGNORED. Positions+collaterals are UncheckedAccount (validated manually):
 // typed accounts can't validate padding slots and 8 Box<Account> blow the SBF stack.
 
-#[callback_accounts("match_batch")]
+#[callback_accounts("match_batch_oc")]
 #[derive(Accounts)]
-pub struct MatchBatchCallback<'info> {
+pub struct MatchBatchOcCallback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(
         address = derive_comp_def_pda!(COMP_DEF_OFFSET_MATCH_BATCH)
@@ -145,14 +162,14 @@ pub struct BatchSettledEvent {
 }
 
 pub fn match_batch_callback_handler(
-    ctx: Context<MatchBatchCallback>,
-    output: SignedComputationOutputs<MatchBatchOutput>,
+    ctx: Context<MatchBatchOcCallback>,
+    output: SignedComputationOutputs<MatchBatchOcOutput>,
 ) -> Result<()> {
     let o = match output.verify_output(
         &ctx.accounts.cluster_account,
         &ctx.accounts.computation_account,
     ) {
-        Ok(MatchBatchOutput { field_0 }) => field_0,
+        Ok(MatchBatchOcOutput { field_0 }) => field_0,
         Err(_) => return Err(ErrorCode::AbortedComputation.into()),
     };
 

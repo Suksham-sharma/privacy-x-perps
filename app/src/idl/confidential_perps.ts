@@ -488,6 +488,62 @@ export type ConfidentialPerps = {
       ]
     },
     {
+      "name": "expireBatch",
+      "discriminator": [
+        55,
+        115,
+        118,
+        37,
+        188,
+        219,
+        144,
+        105
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "batchBuffer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  97,
+                  116,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initAddTogetherCompDef",
       "discriminator": [
         130,
@@ -954,16 +1010,16 @@ export type ConfidentialPerps = {
       "args": []
     },
     {
-      "name": "matchBatchCallback",
+      "name": "matchBatchOcCallback",
       "discriminator": [
-        59,
-        54,
-        18,
-        152,
-        236,
-        46,
-        197,
-        145
+        205,
+        82,
+        13,
+        198,
+        160,
+        117,
+        219,
+        102
       ],
       "accounts": [
         {
@@ -1105,7 +1161,7 @@ export type ConfidentialPerps = {
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "matchBatchOutput"
+                      "name": "matchBatchOcOutput"
                     }
                   }
                 }
@@ -1729,81 +1785,91 @@ export type ConfidentialPerps = {
     },
     {
       "code": 6012,
+      "name": "batchNotProcessing",
+      "msg": "Batch is not in flight; nothing to expire"
+    },
+    {
+      "code": 6013,
+      "name": "batchNotExpired",
+      "msg": "Batch has not been in flight long enough to expire"
+    },
+    {
+      "code": 6014,
       "name": "noOpenPosition",
       "msg": "No open position to close"
     },
     {
-      "code": 6013,
+      "code": 6015,
       "name": "positionUnderwater",
       "msg": "Position is underwater; cannot self-close (liquidation required)"
     },
     {
-      "code": 6014,
+      "code": 6016,
       "name": "positionNotLiquidatable",
       "msg": "Position is healthy; not eligible for liquidation"
     },
     {
-      "code": 6015,
+      "code": 6017,
       "name": "selfLiquidationNotAllowed",
       "msg": "Cannot liquidate your own position"
     },
     {
-      "code": 6016,
+      "code": 6018,
       "name": "marketAlreadyInitialized",
       "msg": "Market is already initialized"
     },
     {
-      "code": 6017,
+      "code": 6019,
       "name": "invalidPythFeed",
       "msg": "Invalid Pyth feed"
     },
     {
-      "code": 6018,
+      "code": 6020,
       "name": "invalidPythAccount",
       "msg": "Pyth account is not owned by the receiver program or has bad data"
     },
     {
-      "code": 6019,
+      "code": 6021,
       "name": "pythVerificationInsufficient",
       "msg": "Pyth price update is not fully verified (Wormhole 2/3 threshold)"
     },
     {
-      "code": 6020,
+      "code": 6022,
       "name": "pythFeedIdMismatch",
       "msg": "Pyth account is for a different asset than the market expects"
     },
     {
-      "code": 6021,
+      "code": 6023,
       "name": "pythPriceStale",
       "msg": "Pyth price is stale beyond MAX_PRICE_AGE_SECS"
     },
     {
-      "code": 6022,
+      "code": 6024,
       "name": "pythPriceInvalid",
       "msg": "Pyth reported a non-positive price"
     },
     {
-      "code": 6023,
+      "code": 6025,
       "name": "pythConfidenceTooWide",
       "msg": "Pyth confidence interval exceeds MAX_PRICE_CONF_BPS of price"
     },
     {
-      "code": 6024,
+      "code": 6026,
       "name": "insufficientCollateral",
       "msg": "Insufficient collateral balance"
     },
     {
-      "code": 6025,
+      "code": 6027,
       "name": "withdrawRateLimitExceeded",
       "msg": "Withdrawal would exceed per-slot rate limit (5% of vault)"
     },
     {
-      "code": 6026,
+      "code": 6028,
       "name": "mathOverflow",
       "msg": "Math overflow"
     },
     {
-      "code": 6027,
+      "code": 6029,
       "name": "zeroAmount",
       "msg": "Amount must be greater than zero"
     }
@@ -2477,7 +2543,7 @@ export type ConfidentialPerps = {
       }
     },
     {
-      "name": "matchBatchOutput",
+      "name": "matchBatchOcOutput",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."
@@ -2489,7 +2555,7 @@ export type ConfidentialPerps = {
             "name": "field0",
             "type": {
               "defined": {
-                "name": "matchBatchOutputStruct0"
+                "name": "matchBatchOcOutputStruct0"
               }
             }
           }
@@ -2497,7 +2563,7 @@ export type ConfidentialPerps = {
       }
     },
     {
-      "name": "matchBatchOutputStruct0",
+      "name": "matchBatchOcOutputStruct0",
       "type": {
         "kind": "struct",
         "fields": [

@@ -81,4 +81,11 @@ pub const ORACLE_BAND_BPS: u64 = 500;
 
 // Computation definition offsets.
 pub const COMP_DEF_OFFSET_ADD_TOGETHER: u32 = comp_def_offset("add_together");
-pub const COMP_DEF_OFFSET_MATCH_BATCH: u32 = comp_def_offset("match_batch");
+pub const COMP_DEF_OFFSET_MATCH_BATCH: u32 = comp_def_offset("match_batch_oc");
+
+// Stuck-batch escape hatch (expire_batch): a wedged BatchBuffer (is_processing
+// stays true when an Arcium computation is dropped and its callback never fires)
+// can be reset permissionlessly once this many slots have elapsed since the batch
+// opened. Generous (~10 min @ 400ms/slot) — far longer than any legitimate
+// window+settle — so it can never grief a batch that is settling normally.
+pub const EXPIRE_BATCH_SLOTS: u64 = 1500;

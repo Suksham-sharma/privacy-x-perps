@@ -27,6 +27,10 @@ pub enum ErrorCode {
     NoPendingOrder,
     #[msg("Batch is already being processed (computation in flight)")]
     BatchAlreadyProcessing,
+    #[msg("Batch is not in flight; nothing to expire")]
+    BatchNotProcessing,
+    #[msg("Batch has not been in flight long enough to expire")]
+    BatchNotExpired,
     #[msg("No open position to close")]
     NoOpenPosition,
     #[msg("Position is underwater; cannot self-close (liquidation required)")]

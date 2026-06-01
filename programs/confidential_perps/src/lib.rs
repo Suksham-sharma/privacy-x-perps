@@ -80,10 +80,10 @@ pub mod confidential_perps {
         process_batch::process_batch_handler(ctx, computation_offset)
     }
 
-    #[arcium_callback(encrypted_ix = "match_batch")]
-    pub fn match_batch_callback(
-        ctx: Context<MatchBatchCallback>,
-        output: SignedComputationOutputs<MatchBatchOutput>,
+    #[arcium_callback(encrypted_ix = "match_batch_oc")]
+    pub fn match_batch_oc_callback(
+        ctx: Context<MatchBatchOcCallback>,
+        output: SignedComputationOutputs<MatchBatchOcOutput>,
     ) -> Result<()> {
         match_batch::match_batch_callback_handler(ctx, output)
     }
@@ -102,6 +102,13 @@ pub mod confidential_perps {
 
     pub fn cancel_order(ctx: Context<CancelOrder>) -> Result<()> {
         cancel_order::cancel_order_handler(ctx)
+    }
+
+    // Permissionless recovery: reset a wedged BatchBuffer (is_processing stuck
+    // true because a dropped Arcium computation's callback never fired) after
+    // EXPIRE_BATCH_SLOTS. Unbricks the market without waiting on the callback.
+    pub fn expire_batch(ctx: Context<ExpireBatch>) -> Result<()> {
+        expire_batch::expire_batch_handler(ctx)
     }
 
     pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {

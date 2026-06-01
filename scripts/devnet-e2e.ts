@@ -163,7 +163,7 @@ async function main() {
   }
   async function crank() {
     const computationOffset = new anchor.BN(randomBytes(8), "hex");
-    const compDefOffset = Buffer.from(getCompDefAccOffset("match_batch")).readUInt32LE();
+    const compDefOffset = Buffer.from(getCompDefAccOffset("match_batch_oc")).readUInt32LE();
     await program.methods
       .processBatch(computationOffset)
       .accountsPartial({

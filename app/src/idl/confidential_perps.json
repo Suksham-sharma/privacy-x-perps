@@ -482,6 +482,62 @@
       ]
     },
     {
+      "name": "expire_batch",
+      "discriminator": [
+        55,
+        115,
+        118,
+        37,
+        188,
+        219,
+        144,
+        105
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "batch_buffer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  97,
+                  116,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_add_together_comp_def",
       "discriminator": [
         130,
@@ -948,16 +1004,16 @@
       "args": []
     },
     {
-      "name": "match_batch_callback",
+      "name": "match_batch_oc_callback",
       "discriminator": [
-        59,
-        54,
-        18,
-        152,
-        236,
-        46,
-        197,
-        145
+        205,
+        82,
+        13,
+        198,
+        160,
+        117,
+        219,
+        102
       ],
       "accounts": [
         {
@@ -1099,7 +1155,7 @@
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "MatchBatchOutput"
+                      "name": "MatchBatchOcOutput"
                     }
                   }
                 }
@@ -1723,81 +1779,91 @@
     },
     {
       "code": 6012,
+      "name": "BatchNotProcessing",
+      "msg": "Batch is not in flight; nothing to expire"
+    },
+    {
+      "code": 6013,
+      "name": "BatchNotExpired",
+      "msg": "Batch has not been in flight long enough to expire"
+    },
+    {
+      "code": 6014,
       "name": "NoOpenPosition",
       "msg": "No open position to close"
     },
     {
-      "code": 6013,
+      "code": 6015,
       "name": "PositionUnderwater",
       "msg": "Position is underwater; cannot self-close (liquidation required)"
     },
     {
-      "code": 6014,
+      "code": 6016,
       "name": "PositionNotLiquidatable",
       "msg": "Position is healthy; not eligible for liquidation"
     },
     {
-      "code": 6015,
+      "code": 6017,
       "name": "SelfLiquidationNotAllowed",
       "msg": "Cannot liquidate your own position"
     },
     {
-      "code": 6016,
+      "code": 6018,
       "name": "MarketAlreadyInitialized",
       "msg": "Market is already initialized"
     },
     {
-      "code": 6017,
+      "code": 6019,
       "name": "InvalidPythFeed",
       "msg": "Invalid Pyth feed"
     },
     {
-      "code": 6018,
+      "code": 6020,
       "name": "InvalidPythAccount",
       "msg": "Pyth account is not owned by the receiver program or has bad data"
     },
     {
-      "code": 6019,
+      "code": 6021,
       "name": "PythVerificationInsufficient",
       "msg": "Pyth price update is not fully verified (Wormhole 2/3 threshold)"
     },
     {
-      "code": 6020,
+      "code": 6022,
       "name": "PythFeedIdMismatch",
       "msg": "Pyth account is for a different asset than the market expects"
     },
     {
-      "code": 6021,
+      "code": 6023,
       "name": "PythPriceStale",
       "msg": "Pyth price is stale beyond MAX_PRICE_AGE_SECS"
     },
     {
-      "code": 6022,
+      "code": 6024,
       "name": "PythPriceInvalid",
       "msg": "Pyth reported a non-positive price"
     },
     {
-      "code": 6023,
+      "code": 6025,
       "name": "PythConfidenceTooWide",
       "msg": "Pyth confidence interval exceeds MAX_PRICE_CONF_BPS of price"
     },
     {
-      "code": 6024,
+      "code": 6026,
       "name": "InsufficientCollateral",
       "msg": "Insufficient collateral balance"
     },
     {
-      "code": 6025,
+      "code": 6027,
       "name": "WithdrawRateLimitExceeded",
       "msg": "Withdrawal would exceed per-slot rate limit (5% of vault)"
     },
     {
-      "code": 6026,
+      "code": 6028,
       "name": "MathOverflow",
       "msg": "Math overflow"
     },
     {
-      "code": 6027,
+      "code": 6029,
       "name": "ZeroAmount",
       "msg": "Amount must be greater than zero"
     }
@@ -2471,7 +2537,7 @@
       }
     },
     {
-      "name": "MatchBatchOutput",
+      "name": "MatchBatchOcOutput",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."
@@ -2483,7 +2549,7 @@
             "name": "field_0",
             "type": {
               "defined": {
-                "name": "MatchBatchOutputStruct0"
+                "name": "MatchBatchOcOutputStruct0"
               }
             }
           }
@@ -2491,7 +2557,7 @@
       }
     },
     {
-      "name": "MatchBatchOutputStruct0",
+      "name": "MatchBatchOcOutputStruct0",
       "type": {
         "kind": "struct",
         "fields": [

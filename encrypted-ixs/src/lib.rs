@@ -66,7 +66,7 @@ mod circuits {
     }
 
     #[instruction]
-    pub fn match_batch(
+    pub fn match_batch_oc(
         o0: Enc<Shared, Order>,
         o1: Enc<Shared, Order>,
         o2: Enc<Shared, Order>,

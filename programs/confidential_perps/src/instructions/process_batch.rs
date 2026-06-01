@@ -8,7 +8,7 @@ use crate::{
         POSITION_SEED, USER_COLLATERAL_SEED,
     },
     error::ErrorCode,
-    instructions::match_batch::MatchBatchCallback,
+    instructions::match_batch::MatchBatchOcCallback,
     state::{BatchBuffer, Market},
     ArciumSignerAccount,
     ID,
@@ -18,7 +18,7 @@ use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::CallbackAccount;
 
-#[queue_computation_accounts("match_batch", payer)]
+#[queue_computation_accounts("match_batch_oc", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
 pub struct ProcessBatch<'info> {
@@ -133,7 +133,7 @@ pub fn process_batch_handler(
         .plaintext_u64(oracle_price)
         .build();
 
-    // Callback extra accounts in MatchBatchCallback's declared order:
+    // Callback extra accounts in MatchBatchOcCallback's declared order:
     // [market, batch_buffer, pool, position_0..3, user_collateral_0..3]. PDAs
     // derive against orders[i].owner (callback must reset the buffer only after
     // fills land); slots >= n_orders are market-key padding the callback ignores.
@@ -180,7 +180,7 @@ pub fn process_batch_handler(
         ctx.accounts,
         computation_offset,
         args,
-        vec![MatchBatchCallback::callback_ix(
+        vec![MatchBatchOcCallback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
             &extra_accs,

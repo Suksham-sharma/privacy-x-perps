@@ -134,7 +134,7 @@ async function maybeCrank(
   // All gates pass — crank.
   const computationOffset = new anchor.BN(randomBytes(8), "hex");
   const compDefOffset = Buffer.from(
-    getCompDefAccOffset("match_batch"),
+    getCompDefAccOffset("match_batch_oc"),
   ).readUInt32LE();
 
   await program.methods
