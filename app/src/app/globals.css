@@ -170,7 +170,8 @@ h2.sec-title em { font-style: italic; }
 .microprint { font-family: var(--mono); font-size: 8px; letter-spacing: 0.3em; color: var(--muted); white-space: nowrap; overflow: hidden; opacity: 0.55; padding: 6px 0; text-transform: uppercase; }
 
 /* terminal */
-.term { border: 1.5px solid var(--ink); background: var(--card); box-shadow: 10px 10px 0 rgba(26,24,21,0.07); }
+.term { border: 1.5px solid var(--ink); background: var(--ink); box-shadow: 10px 10px 0 rgba(26,24,21,0.07); }
+.term-shot { display: block; width: 100%; height: auto; }
 .term-bar { display: flex; align-items: center; gap: 18px; padding: 13px 18px; border-bottom: 1.5px solid var(--ink); background: var(--ink); color: var(--paper); }
 .term-bar .mkt { font-family: var(--mono); font-weight: 600; font-size: 14px; letter-spacing: 0.04em; display: flex; align-items: center; gap: 9px; }
 .term-bar .mkt .glyph { width: 13px; height: 13px; border: 1.5px solid var(--paper); border-radius: 50%; }
@@ -292,11 +293,16 @@ h2.sec-title em { font-style: italic; }
 .cert .seal-row{display:flex;align-items:center;justify-content:center;gap:14px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:var(--muted)}
 
 /* footer */
-footer { background: var(--paper); padding: 60px 0 0; border-top: 1.5px solid var(--ink); }
+footer { background: var(--paper); padding: 60px 0 0; border-top: 1.5px solid var(--ink); overflow: hidden; }
 .foot-grid { display: grid; grid-template-columns: 2.2fr 1fr 1fr; gap: 40px; padding-bottom: 48px; }
 .foot-brand .brand { margin-bottom: 16px; }
 .foot-brand p { color: var(--ink-2); font-size: 14px; line-height: 1.6; max-width: 32ch; }
-.foot-seal-wrap { margin-top: 28px; display: flex; align-items: center; gap: 15px; }
+
+/* footer wordmark — giant lowercase italic, half-cut at the page bottom */
+.fw-cut-wrap { overflow: hidden; max-height: 0.72em; font-size: clamp(120px, 30vw, 460px); margin-top: clamp(8px, 1.2vw, 22px); padding: 0 clamp(14px, 3vw, 38px); }
+.fw-cut-wrap .fw-cut { line-height: 0.92; }
+.fw-cut { display: block; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 1em; line-height: 1; letter-spacing: -0.045em; color: var(--ink); text-decoration: none; white-space: nowrap; }
+.fw-cut em { font-style: italic; color: var(--accent); }
 .iceberg-seal { position: relative; flex: none; display: grid; place-items: center; border-radius: 50%; overflow: hidden; background: var(--card); border: 1.6px solid var(--ink); box-shadow: 0 0 0 4px var(--paper), 0 0 0 5.5px var(--ink); transform: rotate(-5deg); }
 .iceberg-seal.accent { border-color: var(--accent); box-shadow: 0 0 0 4px var(--paper), 0 0 0 5.5px var(--accent); }
 .iceberg-seal-fill { position: absolute; inset: 0; background: url("/guilloche.webp") center / 175% no-repeat; mix-blend-mode: multiply; opacity: 0.5; filter: grayscale(1); }

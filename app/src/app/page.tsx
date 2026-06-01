@@ -1,15 +1,16 @@
 import { SiteNav } from "@/components/SiteNav";
 import { Faq } from "@/components/Faq";
 import { IcebergMark } from "@/components/IcebergMark";
-import { IcebergSeal } from "@/components/IcebergSeal";
+import Image from "next/image";
 
 function Strip() {
   return (
     <span>
-      <span className="dot">◆</span> NOW TRADING · SOL-PERP <span className="dot">◆</span>{" "}
-      ENCRYPTED CLIENT-SIDE <span className="dot">◆</span> MATCHED IN ARCIUM MPC{" "}
-      <span className="dot">◆</span> SETTLED ON SOLANA <span className="dot">◆</span>{" "}
-      PRIVATE TRADES · PUBLIC PROOFS{" "}
+      <span className="dot">◆</span> NOW TRADING · SOL-PERP{" "}
+      <span className="dot">◆</span> ENCRYPTED CLIENT-SIDE{" "}
+      <span className="dot">◆</span> MATCHED IN ARCIUM MPC{" "}
+      <span className="dot">◆</span> SETTLED ON SOLANA{" "}
+      <span className="dot">◆</span> PRIVATE TRADES · PUBLIC PROOFS{" "}
     </span>
   );
 }
@@ -57,7 +58,8 @@ export default function Home() {
             <span className="flex items-center gap-4">
               <span className="h-px w-14 bg-line-2" />
               <span className="font-mono text-[12px] font-medium uppercase tracking-[0.24em] text-ink-2 whitespace-nowrap">
-                Privacy <span className="text-accent">×</span> Perps · Solana Devnet
+                Privacy <span className="text-accent">×</span> Perps · Solana
+                Devnet
               </span>
               <span className="h-px w-14 bg-line-2" />
             </span>
@@ -74,8 +76,8 @@ export default function Home() {
           <div className="flex items-end justify-between gap-12 pt-12 max-[880px]:flex-col max-[880px]:items-start max-[880px]:gap-8">
             <p className="max-w-[42ch] text-[17px] leading-[1.6] text-ink-2">
               Orders encrypted in your browser, matched inside{" "}
-              <b className="font-semibold text-ink">Arcium&apos;s MPC</b> network,
-              settled on-chain. Your size is sealed —{" "}
+              <b className="font-semibold text-ink">Arcium&apos;s MPC</b>{" "}
+              network, settled on-chain. Your size is sealed —{" "}
               <b className="font-semibold text-ink">even from us</b>.
             </p>
             <div className="flex shrink-0 flex-wrap gap-4">
@@ -107,164 +109,26 @@ export default function Home() {
               </h2>
             </div>
             <div className="right">
-              Full depth, real fills, on-chain settlement. The only thing missing
-              is everyone else&apos;s view of your size.
+              Encrypted orders, oracle-priced batch fills, on-chain settlement.
+              The only thing missing is everyone else&apos;s view of your size.
             </div>
           </div>
 
           <div className="term">
-            <div className="term-bar">
-              <span className="mkt">
-                <span className="glyph" /> SOL-PERP
-              </span>
-              <div className="term-stats">
-                <div className="s">
-                  <span className="k">Mark</span>
-                  <span className="v">142.0830</span>
-                </div>
-                <div className="s">
-                  <span className="k">24h</span>
-                  <span className="v up">+3.42%</span>
-                </div>
-                <div className="s">
-                  <span className="k">Funding</span>
-                  <span className="v">0.0094%</span>
-                </div>
-                <div className="s">
-                  <span className="k">Open Int.</span>
-                  <span className="v">$12.4M</span>
-                </div>
-              </div>
-              <div className="term-spacer" />
-              <span className="sess">
-                <span className="pip" /> Encrypted session
-              </span>
-            </div>
-            <div className="term-body">
-              <div className="term-chart">
-                <div className="chart-head">
-                  <span className="px">142.0830</span>
-                  <span className="chg">+4.71 (3.42%)</span>
-                  <div className="tf">
-                    <span>15m</span>
-                    <span>1H</span>
-                    <span className="on">4H</span>
-                    <span>1D</span>
-                  </div>
-                </div>
-                <div className="chart-svg">
-                  <svg viewBox="0 0 620 172" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="cf" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stopColor="rgba(36,56,222,0.12)" />
-                        <stop offset="1" stopColor="rgba(36,56,222,0)" />
-                      </linearGradient>
-                    </defs>
-                    <line x1="0" y1="43" x2="620" y2="43" stroke="rgba(26,24,21,0.07)" />
-                    <line x1="0" y1="86" x2="620" y2="86" stroke="rgba(26,24,21,0.07)" />
-                    <line x1="0" y1="129" x2="620" y2="129" stroke="rgba(26,24,21,0.07)" />
-                    <path
-                      d="M0,128 C50,120 80,138 110,112 C150,80 175,100 210,82 C250,62 280,92 315,74 C350,58 380,30 415,46 C450,62 480,28 515,30 C555,32 585,16 620,14 L620,172 L0,172 Z"
-                      fill="url(#cf)"
-                    />
-                    <path
-                      d="M0,128 C50,120 80,138 110,112 C150,80 175,100 210,82 C250,62 280,92 315,74 C350,58 380,30 415,46 C450,62 480,28 515,30 C555,32 585,16 620,14"
-                      fill="none"
-                      stroke="var(--ink)"
-                      strokeWidth="1.6"
-                    />
-                    <circle cx="620" cy="14" r="3" fill="var(--accent)" />
-                  </svg>
-                </div>
-                <div className="ob">
-                  <div className="ob-h">
-                    <span>Price · USDC</span>
-                    <span>Size</span>
-                    <span>Trader</span>
-                  </div>
-                  <div className="ob-row ask">
-                    <span className="p">142.40</span>
-                    <span className="sz">
-                      <span className="redact">██████</span>
-                    </span>
-                    <span className="tr">0x7f…a2</span>
-                  </div>
-                  <div className="ob-row ask">
-                    <span className="p">142.22</span>
-                    <span className="sz">
-                      <span className="redact">████</span>
-                    </span>
-                    <span className="tr">0x3c…9e</span>
-                  </div>
-                  <div className="ob-row bid">
-                    <span className="p">142.05</span>
-                    <span className="sz">
-                      <span className="redact">███████</span>
-                    </span>
-                    <span className="tr">0x9a…41</span>
-                  </div>
-                  <div className="ob-row bid">
-                    <span className="p">141.88</span>
-                    <span className="sz">
-                      <span className="redact">█████</span>
-                    </span>
-                    <span className="tr">0xb1…7d</span>
-                  </div>
-                </div>
-              </div>
-              <div className="ticket">
-                <div className="ls">
-                  <button className="on-long">Long</button>
-                  <button>Short</button>
-                </div>
-                <div className="fld">
-                  <div className="flab">
-                    <span>Size</span>
-                    <span>Bal 4,820.00</span>
-                  </div>
-                  <div className="fin">
-                    <span className="redact">███████</span>
-                    <span className="u">USDC</span>
-                  </div>
-                </div>
-                <div className="fld">
-                  <div className="flab">
-                    <span>Leverage</span>
-                    <span style={{ color: "var(--accent)" }}>4.0×</span>
-                  </div>
-                  <div className="lev-track">
-                    <div className="lev-fill" />
-                    <div className="lev-knob" />
-                  </div>
-                  <div className="lev-marks">
-                    <span>1×</span>
-                    <span>5×</span>
-                    <span>10×</span>
-                  </div>
-                </div>
-                <div className="ticket-sum">
-                  <div className="l">
-                    <span className="k">Entry</span>
-                    <span>142.08</span>
-                  </div>
-                  <div className="l">
-                    <span className="k">Liq. price</span>
-                    <span className="redact">█████</span>
-                  </div>
-                  <div className="l">
-                    <span className="k">Fee</span>
-                    <span>0.04%</span>
-                  </div>
-                </div>
-                <div className="seal">
-                  <svg className="ic">
-                    <use href="#i-lock" />
-                  </svg>{" "}
-                  Encrypted before it leaves your browser
-                </div>
-                <button className="submit">Encrypt &amp; Submit</button>
-              </div>
-            </div>
+            <a
+              href="/trade"
+              aria-label="Open the live Iceberg trading terminal"
+              style={{ display: "block" }}
+            >
+              <Image
+                src="/trade-terminal.webp"
+                alt="The Iceberg terminal: encrypted order ticket, live SOL-PERP candlestick chart, and a short position filled through an Arcium MPC batch and settled on Solana"
+                width={2200}
+                height={1209}
+                unoptimized
+                className="term-shot"
+              />
+            </a>
           </div>
         </div>
       </section>
@@ -279,8 +143,8 @@ export default function Home() {
               </h2>
             </div>
             <div className="right">
-              Every action maps to a cryptographic guarantee — from your keyboard
-              to the chain.
+              Every action maps to a cryptographic guarantee — from your
+              keyboard to the chain.
             </div>
           </div>
           <div className="seq">
@@ -318,8 +182,8 @@ export default function Home() {
               <div className="seq-num">III</div>
               <h3>Settle on-chain</h3>
               <p>
-                The fill posts to Solana with a proof. Collateral and PnL update;
-                your size stays sealed in state.
+                The fill posts to Solana with a proof. Collateral and PnL
+                update; your size stays sealed in state.
               </p>
               <div className="seq-demo">
                 <span style={{ color: "var(--muted)" }}>tx</span>
@@ -369,7 +233,9 @@ export default function Home() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="feat">Copy-trading / front-running your book</td>
+                  <td className="feat">
+                    Copy-trading / front-running your book
+                  </td>
                   <td className="them">
                     <span className="x">✕</span> Exposed
                   </td>
@@ -378,7 +244,9 @@ export default function Home() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="feat">Liquidation hunting on large positions</td>
+                  <td className="feat">
+                    Liquidation hunting on large positions
+                  </td>
                   <td className="them">
                     <span className="x">✕</span> Targeted
                   </td>
@@ -387,7 +255,9 @@ export default function Home() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="feat">On-chain settlement &amp; verifiability</td>
+                  <td className="feat">
+                    On-chain settlement &amp; verifiability
+                  </td>
                   <td className="them">
                     <span className="ok">✓</span> Yes
                   </td>
@@ -440,8 +310,8 @@ export default function Home() {
                 Settle in <em>the open.</em>
               </h2>
               <p>
-                Place encrypted orders, keep your size sealed, and settle on-chain
-                with proofs anyone can verify.
+                Place encrypted orders, keep your size sealed, and settle
+                on-chain with proofs anyone can verify.
               </p>
               <div className="btns">
                 <a href="/trade" className="btn btn-accent btn-lg">
@@ -453,13 +323,6 @@ export default function Home() {
                 <a href="#how" className="btn btn-lg">
                   How it works
                 </a>
-              </div>
-              <div className="seal-row">
-                <span>No. A47-2F</span>
-                <span className="stamp blue" style={{ transform: "rotate(-3deg)" }}>
-                  MPC-Sealed
-                </span>
-                <span>Devnet 2026</span>
               </div>
             </div>
           </div>
@@ -478,13 +341,9 @@ export default function Home() {
               </a>
               <p>
                 The first confidential perpetuals exchange on Solana. Orders are
-                matched inside Arcium&apos;s MPC network — your size stays sealed,
-                settlement stays public.
+                matched inside Arcium&apos;s MPC network — your size stays
+                sealed, settlement stays public.
               </p>
-              <div className="foot-seal-wrap">
-                <IcebergSeal size={104} />
-                <span className="foot-seal-cap">Issued · Solana Devnet · MMXXVI</span>
-              </div>
             </div>
             <div className="foot-col">
               <h4>Explore</h4>
@@ -503,10 +362,17 @@ export default function Home() {
               </a>
             </div>
           </div>
-          <div className="foot-bottom">
-            <span>© 2026 Iceberg — Solana Devnet</span>
-            <span>Solana × Arcium MPC · Encrypted client-side · Settled on-chain</span>
-          </div>
+
+        </div>
+
+        <div className="fw-cut-wrap">
+          <a
+            href="/trade"
+            className="fw-cut"
+            aria-label="Launch the Iceberg terminal"
+          >
+            ice<em>berg</em>
+          </a>
         </div>
       </footer>
     </>
