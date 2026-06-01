@@ -217,7 +217,11 @@ async function main() {
   await submit(bob, 1n, 1n);
   console.log("   submitted alice LONG 1 / bob SHORT 1 — waiting for window + crank + MPC settle…");
   await waitWindowClose();
-  await crank();
+  if (process.env.KEEPER_DRIVEN) {
+    console.log("   (KEEPER_DRIVEN) window closed — leaving the crank to the keeper bot…");
+  } else {
+    await crank();
+  }
   await waitSettle(idA);
   const aliceP = await fetchPos(alice.publicKey);
   const bobP = await fetchPos(bob.publicKey);
@@ -246,7 +250,11 @@ async function main() {
   await submit(carol, 0n, 1n);
   console.log("   submitted carol LONG 1 (alone) — waiting for window + crank + MPC settle…");
   await waitWindowClose();
-  await crank();
+  if (process.env.KEEPER_DRIVEN) {
+    console.log("   (KEEPER_DRIVEN) window closed — leaving the crank to the keeper bot…");
+  } else {
+    await crank();
+  }
   await waitSettle(idB);
   const carolP = await fetchPos(carol.publicKey);
   const poolB1 = await fetchPool();

@@ -55,12 +55,12 @@ position itself is the next milestone (v0.2).
    per-market `BatchBuffer`, locking `max_margin` USDC from the trader's `UserCollateral`.
 3. The permissionless **keeper** polls the buffer; once the batch window (~20s) closes and there
    is ≥1 order, it calls `process_batch`.
-4. `process_batch` reads the Pyth oracle, then queues the `match_batch` computation to Arcium with
+4. `process_batch` reads the Pyth oracle, then queues the `match_batch_oc` computation to Arcium with
    the encrypted order envelopes + the public oracle price as inputs.
 5. The Arcium MPC cluster runs the circuit over secret-shared inputs and returns a **signed**
    `BatchOutput` — the matching is the only place plaintext order data is ever reconstructed, and
    even there it's split across nodes.
-6. `match_batch_callback` verifies the signature and applies the revealed fills to each
+6. `match_batch_oc_callback` verifies the signature and applies the revealed fills to each
    `Position`; the `Pool` absorbs the net imbalance at the clearing price; the buffer resets and a
    `BatchSettledEvent` is emitted.
 7. The app subscribes to program logs, sees the event, and refreshes positions + collateral.
@@ -105,7 +105,7 @@ Reference models: Flash Trade "pool-to-peer", Jupiter JLP, Drift AMM-backstop.
 | Path                           | Purpose                                                              |
 | ------------------------------ | -------------------------------------------------------------------- |
 | `programs/confidential_perps/` | Anchor program — state, instructions, callbacks, Pyth reader         |
-| `encrypted-ixs/`               | Arcis confidential circuits (`match_batch`, `add_together` canary)   |
+| `encrypted-ixs/`               | Arcis confidential circuits (`match_batch_oc`, `add_together` canary)|
 | `sdk/`                         | TypeScript SDK — PDA derivation, order encryption, fill decryption   |
 | `app/`                         | Next.js app — marketing landing (`/`) + `/trade` terminal            |
 | `keeper/`                      | Batch cranker + permissionless liquidator + (localnet) oracle pusher |
@@ -155,12 +155,13 @@ order → the keeper cranks → watch it fill against the pool (or a peer) → c
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `init_market(pyth_feed_id)`                                                                   | One-time, immutable market init (SOL-PERP).                           |
 | `init_pool(amount)`                                                                           | Fund the singleton LP backstop.                                       |
-| `init_match_batch_comp_def`                                                                   | Register the `match_batch` Arcium computation definition.             |
+| `init_match_batch_comp_def`                                                                   | Register the `match_batch_oc` Arcium computation definition.          |
 | `deposit(amount)` / `withdraw(amount)`                                                        | Move USDC between wallet and vault (5%/slot withdraw cap).            |
 | `submit_order(x25519_pubkey, nonce, max_margin, ct_side, ct_price, ct_size, ct_client_nonce)` | Place an **encrypted** order; locks margin.                           |
 | `cancel_order()`                                                                              | Owner reclaims a pending order + margin.                              |
 | `process_batch(computation_offset)`                                                           | Permissionless crank: reads Pyth, queues the MPC match.               |
-| `match_batch_callback`                                                                        | Arcium callback: applies fills, pool absorbs net, resets buffer.      |
+| `expire_batch()`                                                                              | Permissionless recovery: reset a `BatchBuffer` wedged by a dropped computation (after a timeout). |
+| `match_batch_oc_callback`                                                                     | Arcium callback: applies fills, pool absorbs net, resets buffer.      |
 | `close_position()`                                                                            | Realize PnL against the oracle, release margin.                       |
 | `liquidate_position()`                                                                        | Permissionless close at 50% maintenance.                              |
 | `set_mock_oracle(price)`                                                                      | **Localnet/demo only** (`mock-oracle` feature) — pushes a live price. |
